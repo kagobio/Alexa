@@ -136,7 +136,7 @@ const MODES = [
   {name:"Prensa francesa", dose:30, ratio:15,   tMin:230, tMax:250, autoStart:true,  autoStop:false, kind:"pour"},
   {name:"Libre",           dose:0,  ratio:0,    tMin:0,   tMax:0,   autoStart:false, autoStop:false, kind:"pour"},
 ];
-const cfg = MODES.map(m => ({...m}));
+const cfg = MODES.map(m => ({...m, stopAtWeight: m.dose > 0}));   // parar al llegar al peso objetivo
 const C = {BLACK:"#000", WHITE:"#fff", GREY:"#7b7d7b", DARK:"#202420", YELLOW:"#f5d400", GREEN:"#22dd00",
            RED:"#f00000", COFFEE:"#5a3a18", COFFEE_OVER:"#8a2828", CREMA:"#cc8c44"};
 
@@ -144,11 +144,11 @@ const C = {BLACK:"#000", WHITE:"#fff", GREY:"#7b7d7b", DARK:"#202420", YELLOW:"#
 let simNow = 0, speed = 1;
 let state = "READY";            // READY, BREW, DONE, MENU, EDIT, CAL
 let mode = 0, armed = false, rising = false, riseAt = 0;
-let startMs = 0, endMs = 0, lastFlowMs = 0, finalWeight = 0;
+let reachedAt = 0, startMs = 0, endMs = 0, lastFlowMs = 0, finalWeight = 0;
 let tareG = 0, wf = 0, shown = 0, flow = 0, haveW = false;
 let hist = [], toast = "", toastUntil = 0;
 let menuRow = 0, draft = 0;
-const MENU_ROWS = 7;
+const MENU_ROWS = 8;   // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Calibrar, Volver
 
 // ---------- Simulación física ----------
 let cupOn = false, cupMass = 185, liquid = 0;
@@ -168,8 +168,8 @@ function startScenario() {
     const base = tg / Math.max(mid - 3, 5);
     scenario = {kind:"shot", t0: simNow + 4500, base, target: tg, done:false};
   } else {
-    const total = tg > 0 ? tg : 100, tm = (m.tMax || 40);
-    const fr = tg > 0 ? [0.19, 0.42, 0.39] : [1], st = tg > 0 ? [0.02, 0.25, 0.5] : [0.05], du = tg > 0 ? [8, 20, 20] : [10];
+    const total = tg > 0 ? tg : 100, tm = (m.tMin + m.tMax) / 2 || 40;
+    const fr = tg > 0 ? [0.19, 0.42, 0.39] : [1], st = tg > 0 ? [0.02, 0.33, 0.74] : [0.05], du = tg > 0 ? [0.06 * tm, 0.16 * tm, 0.22 * tm] : [10];
     scenario = {kind:"pour", pours: fr.map((f,i)=>({s: simNow + 3000 + st[i]*tm*1000, d: du[i]*1000, g: total*f})), done:false};
   }
   setStatus("Preparando… (el reloj arranca solo si hiciste la tara).");
@@ -182,7 +182,7 @@ function stepScenario(dt) {
     let f = scenario.base * (1 - Math.exp(-t / 3)) * 1.12;
     const left = scenario.target - liquid;
     f *= Math.min(1, Math.max(0.12, left / 3));
-    if (left <= 0.3) { scenario = null; setStatus("Extracción terminada."); return; }
+    if (left <= 0.05) { scenario = null; setStatus("Extracción terminada."); return; }
     liquid += f * dt / 1000;
   } else {
     let active = false, remaining = false;
@@ -216,7 +216,7 @@ function doTare() {
   tareRT = performance.now(); tareG = sensorRaw; shown = wf = 0; hist = []; flow = 0; armed = true; rising = false;
   showToast("Tara", 900);
 }
-function startBrew(at) { state = "BREW"; startMs = at; lastFlowMs = simNow; armed = false; rising = false; }
+function startBrew(at) { reachedAt = 0; state = "BREW"; startMs = at; lastFlowMs = simNow; armed = false; rising = false; }
 function stopBrew(end) { endMs = end; finalWeight = shown; state = "DONE"; doneRT = performance.now();
   const c = cfg[mode], sec = Math.floor((end - startMs) / 1000); doneInWindow = targetG() > 0 && sec >= c.tMin && sec <= c.tMax; burst(doneInWindow); }
 function resetToReady() { state = "READY"; armed = false; rising = false; }
@@ -230,6 +230,13 @@ function brewLogic() {
     } else rising = false;
   } else if (state === "BREW") {
     if (flow >= 0.4) lastFlowMs = simNow;
+    // Parar al peso: al alcanzar el objetivo (con 0.2 g de margen, sostenido 200 ms) se para el reloj.
+    const tg = targetG();
+    if (c.stopAtWeight && tg > 0) {
+      if (wf >= tg - 0.2) { if (!reachedAt) reachedAt = simNow; if (simNow - reachedAt >= 200) { stopBrew(reachedAt); reachedAt = 0; return; } }
+      else reachedAt = 0;
+    }
+    // Parada por falta de caudal (solo espresso y similares)
     if (c.autoStop && shown >= 5 && simNow - lastFlowMs >= 4000) stopBrew(lastFlowMs);
   }
 }
@@ -256,8 +263,9 @@ function pressKnob() {
     else if (menuRow === 1) { draft = c.ratio; state = "EDIT"; }
     else if (menuRow === 2) { draft = c.tMin; state = "EDIT"; }
     else if (menuRow === 3) { draft = c.tMax; state = "EDIT"; }
-    else if (menuRow === 4) c.autoStart = !c.autoStart;
-    else if (menuRow === 5) { showToast("Calibración: solo en el aparato real", 2500); }
+    else if (menuRow === 4) c.stopAtWeight = !c.stopAtWeight;
+    else if (menuRow === 5) c.autoStart = !c.autoStart;
+    else if (menuRow === 6) { showToast("Calibración: solo en el aparato real", 2500); }
     else resetToReady();
   } else if (state === "EDIT") {
     if (menuRow === 0) c.dose = draft; else if (menuRow === 1) c.ratio = draft;
@@ -342,7 +350,7 @@ function drawMain(now) {
     g.fillStyle = "#666"; g.fillRect(x0 + w - 1, y - 3, 2, 8);   // marca del objetivo
   }
 }
-function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Auto inicio","Calibrar","Volver"][r]; }
+function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Parar al peso","Auto inicio","Calibrar","Volver"][r]; }
 function menuValue(r) {
   const c = cfg[mode], ed = state === "EDIT" && r === menuRow;
   switch (r) {
@@ -350,7 +358,8 @@ function menuValue(r) {
     case 1: return "1:" + (ed ? draft : c.ratio).toFixed(1);
     case 2: return fmtT(ed ? Math.round(draft) : c.tMin);
     case 3: return fmtT(ed ? Math.round(draft) : c.tMax);
-    case 4: return c.autoStart ? "SI" : "NO";
+    case 4: return c.stopAtWeight ? "SI" : "NO";
+    case 5: return c.autoStart ? "SI" : "NO";
     default: return "";
   }
 }
@@ -399,7 +408,7 @@ function autoStep() {
   else if (auto.phase === 2 && simNow - auto.t > 1200) { startScenario(); auto.phase = 3; }
   else if (auto.phase === 3 && !scenario) {
     // En espresso la parada es automática; en el resto pulsamos azul tras un momento.
-    if (state === "BREW" && !cfg[mode].autoStop) { auto.t = simNow; auto.phase = 4; }
+    if (state === "BREW" && !cfg[mode].autoStop && !cfg[mode].stopAtWeight) { auto.t = simNow; auto.phase = 4; }
     else if (state === "DONE") { auto = null; setStatus("Demo terminada: mira el resumen en pantalla."); }
   }
   else if (auto.phase === 4 && simNow - auto.t > 4000) { blueShort(); auto = null; setStatus("Demo terminada: mira el resumen en pantalla."); }

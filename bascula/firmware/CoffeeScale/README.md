@@ -34,7 +34,7 @@ en 80 SPS. Si no lo haces, funciona igual a 10 SPS, con caudal más lento de rea
 
 ## Modos (valores iniciales orientativos, editables)
 
-| Modo | Dosis | Ratio | Objetivo | Tiempo | Parada auto |
+| Modo | Dosis | Ratio | Objetivo | Tiempo | Parada por falta de caudal |
 | --- | --- | --- | --- | --- | --- |
 | Espresso | 18 g | 1:2 | 36 g | 25–32 s | sí |
 | Ristretto | 18 g | 1:1.5 | 27 g | 20–28 s | sí |
@@ -51,11 +51,14 @@ Dosis, ratio y ventana de tiempo se editan por modo en **Ajustes** y se guardan 
 - **Pulsar el pomo**: tara. Arma el arranque automático.
 - **Arranque automático**: tras la tara, el reloj arranca solo cuando el peso sube ≥ 1 g
   (primer goteo o primer chorro). También puedes arrancar con el **botón azul**.
-- **Botón azul** durante la extracción: parar. Con parada automática (espresso) se para solo
+- **Parar al peso** (activado por defecto en todos los modos con objetivo): el reloj se para solo al
+  alcanzar dosis × ratio (margen de 0,2 g). Se desactiva por modo en Ajustes. Así el reloj no sigue
+  corriendo cuando ya has vertido todo.
+- **Botón azul** durante la extracción: parar a mano. Con parada automática (espresso) se para solo
   tras 4 s sin caudal y el tiempo mostrado es el del último flujo.
 - **Pomo** durante la extracción: re-tara sin parar el reloj (útil en pour-over).
 - **Botón azul largo** (en espera o al terminar): menú de Ajustes
-  (dosis, ratio, tiempo mín/máx, auto inicio, calibrar).
+  (dosis, ratio, tiempo mín/máx, parar al peso, auto inicio, calibrar).
 - Pantalla: tiempo grande (verde dentro de la ventana, rojo si se pasa), peso, caudal en g/s
   y un fondo de café que sube con una onda hasta el peso objetivo. Al terminar muestra el
   ratio real y si fue rápido, en tiempo o lento.

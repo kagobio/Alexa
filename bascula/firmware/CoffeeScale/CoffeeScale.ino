@@ -47,9 +47,9 @@ const ModeDef MODES[] = {
 };
 constexpr int MODE_COUNT = sizeof(MODES) / sizeof(MODES[0]);
 
-struct ModeCfg { float dose, ratio; uint16_t tMin, tMax; uint8_t autoStart; };
+struct ModeCfg { float dose, ratio; uint16_t tMin, tMax; uint8_t autoStart, stopAtWeight; };
 struct Saved {
-  uint32_t magic = 0x43463031;
+  uint32_t magic = 0x43463032;   // cambia al modificar la estructura guardada
   float cpg = 0;            // cuentas ADC por gramo (0 = sin calibrar)
   int32_t zeroRaw = 0;      // cero de la plataforma vacia
   uint8_t mode = 0;
@@ -116,13 +116,13 @@ uint32_t lastReadMs = 0;
 enum State { READY, BREW, DONE, MENU, EDIT, CAL_EMPTY, CAL_MASS, CAL_LOAD };
 State state = READY;
 bool dirty = true, armed = false, busy = false;
-uint32_t startMs = 0, endMs = 0, lastFlowMs = 0, riseAt = 0, lastDraw = 0, toastUntil = 0;
+uint32_t startMs = 0, endMs = 0, lastFlowMs = 0, riseAt = 0, reachedAt = 0, lastDraw = 0, toastUntil = 0;
 bool rising = false;
 float finalWeight = 0;
 String toast;
 int menuRow = 0, knownMass = 100;
 float draft = 0, calEmpty = 0;
-constexpr int MENU_ROWS = 7; // Dosis, Ratio, T min, T max, Auto inicio, Calibrar, Volver
+constexpr int MENU_ROWS = 8; // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Calibrar, Volver
 
 const ModeDef &curDef() { return MODES[saved.mode]; }
 ModeCfg &curCfg() { return saved.m[saved.mode]; }
@@ -180,7 +180,7 @@ float sampleRaw(int n) {
 
 // ---------- Temporizador / preparacion ----------
 void startBrew(uint32_t at) {
-  state = BREW; startMs = at; lastFlowMs = millis(); armed = false; rising = false; dirty = true;
+  state = BREW; startMs = at; lastFlowMs = millis(); reachedAt = 0; armed = false; rising = false; dirty = true;
 }
 void stopBrew(uint32_t end) {
   endMs = end; finalWeight = shown; state = DONE; dirty = true;
@@ -200,6 +200,14 @@ void brewLogic(uint32_t now) {
     } else rising = false;
   } else if (state == BREW) {
     if (flow >= 0.4f) lastFlowMs = now;
+    // Parar al peso: al alcanzar el objetivo (margen 0.2 g, sostenido 200 ms) se para el reloj.
+    float tg = targetG();
+    if (curCfg().stopAtWeight && tg > 0) {
+      if (wf >= tg - 0.2f) {
+        if (!reachedAt) reachedAt = now;
+        if (now - reachedAt >= 200) { stopBrew(reachedAt); reachedAt = 0; return; }
+      } else reachedAt = 0;
+    }
     // Parada automatica (espresso): sin caudal durante 4 s tras haber salido >= 5 g.
     if (curDef().autoStop && shown >= 5.0f && now - lastFlowMs >= 4000) stopBrew(lastFlowMs);
   }
@@ -304,8 +312,9 @@ String menuLabel(int r) {
     case 1: return "Ratio";
     case 2: return "Tiempo min";
     case 3: return "Tiempo max";
-    case 4: return "Auto inicio";
-    case 5: return "Calibrar";
+    case 4: return "Parar al peso";
+    case 5: return "Auto inicio";
+    case 6: return "Calibrar";
     default: return "Volver";
   }
 }
@@ -317,7 +326,8 @@ String menuValue(int r) {
     case 1: snprintf(b, sizeof b, "1:%.1f", editing ? draft : c.ratio); return b;
     case 2: return fmtT(editing ? int(draft) : c.tMin);
     case 3: return fmtT(editing ? int(draft) : c.tMax);
-    case 4: return c.autoStart ? "SI" : "NO";
+    case 4: return c.stopAtWeight ? "SI" : "NO";
+    case 5: return c.autoStart ? "SI" : "NO";
     default: return "";
   }
 }
@@ -390,8 +400,9 @@ void handleInput(uint32_t now) {
         else if (menuRow == 1) { draft = c.ratio; state = EDIT; }
         else if (menuRow == 2) { draft = c.tMin; state = EDIT; }
         else if (menuRow == 3) { draft = c.tMax; state = EDIT; }
-        else if (menuRow == 4) { c.autoStart = !c.autoStart; saveCfg(); }
-        else if (menuRow == 5) state = CAL_EMPTY;
+        else if (menuRow == 4) { c.stopAtWeight = !c.stopAtWeight; saveCfg(); }
+        else if (menuRow == 5) { c.autoStart = !c.autoStart; saveCfg(); }
+        else if (menuRow == 6) state = CAL_EMPTY;
         else resetToReady();
       }
       break;
@@ -466,7 +477,8 @@ void setup() {
 
   // Configuracion por defecto y carga desde flash.
   for (int i = 0; i < MODE_COUNT; i++)
-    saved.m[i] = {MODES[i].dose, MODES[i].ratio, MODES[i].tMin, MODES[i].tMax, (uint8_t)MODES[i].autoStart};
+    saved.m[i] = {MODES[i].dose, MODES[i].ratio, MODES[i].tMin, MODES[i].tMax, (uint8_t)MODES[i].autoStart,
+                  (uint8_t)(MODES[i].dose > 0)};   // parar al peso: activado en los modos con objetivo
   if (prefs.begin("coffee", false)) {
     Saved loaded;
     if (prefs.getBytesLength("cfg") == sizeof(loaded) &&
