@@ -34,15 +34,15 @@ en 80 SPS. Si no lo haces, funciona igual a 10 SPS, con caudal más lento de rea
 
 ## Modos (valores iniciales orientativos, editables)
 
-| Modo | Dosis | Ratio | Objetivo | Tiempo | Parada por falta de caudal |
+| Modo | Dosis | Ratio | Objetivo | Tiempo | Parar por defecto |
 | --- | --- | --- | --- | --- | --- |
-| Espresso | 18 g | 1:2 | 36 g | 25–32 s | sí |
-| Ristretto | 18 g | 1:1.5 | 27 g | 20–28 s | sí |
-| Lungo | 18 g | 1:3 | 54 g | 30–45 s | sí |
-| V60 | 15 g | 1:16 | 240 g | 2:30–3:30 | no |
-| Aeropress | 15 g | 1:13 | 195 g | 1:30–2:00 | no |
-| Prensa francesa | 30 g | 1:15 | 450 g | 3:50–4:10 | no |
-| Libre | – | – | sin objetivo | – | no |
+| Espresso | 18 g | 1:2 | 36 g | 25–32 s | al peso |
+| Ristretto | 18 g | 1:1.5 | 27 g | 20–28 s | al peso |
+| Lungo | 18 g | 1:3 | 54 g | 30–45 s | al peso |
+| V60 | 15 g | 1:16 | 240 g | 2:30–3:30 | a mano |
+| Aeropress | 15 g | 1:13 | 195 g | 1:30–2:00 | a mano |
+| Prensa francesa | 30 g | 1:15 | 450 g | 3:50–4:10 | a mano |
+| Libre | – | – | sin objetivo | – | a mano |
 
 Dosis, ratio y ventana de tiempo se editan por modo en **Ajustes** y se guardan en la memoria.
 
@@ -51,14 +51,19 @@ Dosis, ratio y ventana de tiempo se editan por modo en **Ajustes** y se guardan 
 - **Pulsar el pomo**: tara. Arma el arranque automático.
 - **Arranque automático**: tras la tara, el reloj arranca solo cuando el peso sube ≥ 1 g
   (primer goteo o primer chorro). También puedes arrancar con el **botón azul**.
-- **Parar al peso** (activado por defecto en todos los modos con objetivo): el reloj se para solo al
-  alcanzar dosis × ratio (margen de 0,2 g). Se desactiva por modo en Ajustes. Así el reloj no sigue
-  corriendo cuando ya has vertido todo.
+- **Parar** (Ajustes, por modo): *a mano*, *al peso* o *sin goteo*.
+  - **Espresso, Ristretto y Lungo** vienen en *al peso*: el reloj se para solo al llegar a dosis × ratio.
+  - **V60, Aeropress y Prensa francesa** vienen en *a mano*: en filtro el peso no marca el final de la preparación
+    (el café sigue escurriendo). Al llegar al objetivo la báscula solo avisa ("Objetivo alcanzado" y, si están
+    activados, un aviso al móvil) y **el reloj sigue** hasta que lo paras con el botón azul.
+  - *sin goteo*: tras el objetivo, para cuando el caudal lleva 8 s por debajo de 0,4 g/s. Solo funciona si la
+    báscula está **debajo de la jarra** y ve caer el café; si pesa todo el conjunto (agua en el filtro incluida), el peso
+    no cambia al escurrir y no detecta el final: ahí usa *a mano*.
 - **Botón azul** durante la extracción: parar a mano. Con parada automática (espresso) se para solo
   tras 4 s sin caudal y el tiempo mostrado es el del último flujo.
 - **Pomo** durante la extracción: re-tara sin parar el reloj (útil en pour-over).
 - **Botón azul largo** (en espera o al terminar): menú de Ajustes
-  (dosis, ratio, tiempo mín/máx, parar al peso, auto inicio, calibrar).
+  (dosis, ratio, tiempo mín/máx, parar, auto inicio, avisos al móvil, Wi-Fi, código, calibrar).
 - Pantalla: tiempo grande (verde dentro de la ventana, rojo si se pasa), peso, caudal en g/s
   y un fondo de café que sube con una onda hasta el peso objetivo. Al terminar muestra el
   ratio real y si fue rápido, en tiempo o lento.

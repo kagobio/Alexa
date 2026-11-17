@@ -52,9 +52,9 @@ const ModeDef MODES[] = {
 };
 constexpr int MODE_COUNT = sizeof(MODES) / sizeof(MODES[0]);
 
-struct ModeCfg { float dose, ratio; uint16_t tMin, tMax; uint8_t autoStart, stopAtWeight; };
+struct ModeCfg { float dose, ratio; uint16_t tMin, tMax; uint8_t autoStart, stopMode; };   // stopMode: 0 = a mano, 1 = al peso, 2 = sin goteo
 struct Saved {
-  uint32_t magic = 0x43463033;   // cambia al modificar la estructura guardada
+  uint32_t magic = 0x43463034;   // cambia al modificar la estructura guardada
   float cpg = 0;            // cuentas ADC por gramo (0 = sin calibrar)
   int32_t zeroRaw = 0;      // cero de la plataforma vacia
   uint8_t mode = 0;
@@ -123,6 +123,7 @@ uint32_t lastReadMs = 0;
 enum State { READY, BREW, DONE, MENU, EDIT, CAL_EMPTY, CAL_MASS, CAL_LOAD };
 State state = READY;
 bool dirty = true, armed = false, busy = false;
+bool targetCue = false;
 uint32_t startMs = 0, endMs = 0, lastFlowMs = 0, riseAt = 0, reachedAt = 0, lastDraw = 0, toastUntil = 0;
 bool rising = false;
 float finalWeight = 0;
@@ -222,7 +223,7 @@ void wifiApply() {            // enciende o apaga el Wi-Fi segun el ajuste
 
 // ---------- Temporizador / preparacion ----------
 void startBrew(uint32_t at) {
-  state = BREW; startMs = at; lastFlowMs = millis(); reachedAt = 0; armed = false; rising = false; dirty = true;
+  state = BREW; startMs = at; lastFlowMs = millis(); reachedAt = 0; targetCue = false; armed = false; rising = false; dirty = true;
 }
 void stopBrew(uint32_t end) {
   endMs = end; finalWeight = shown; state = DONE; dirty = true;
@@ -249,14 +250,28 @@ void brewLogic(uint32_t now) {
     } else rising = false;
   } else if (state == BREW) {
     if (flow >= 0.4f) lastFlowMs = now;
-    // Parar al peso: al alcanzar el objetivo (margen 0.2 g, sostenido 200 ms) se para el reloj.
+    // Objetivo alcanzado (margen 0.2 g, sostenido 200 ms).
     float tg = targetG();
-    if (curCfg().stopAtWeight && tg > 0) {
+    if (tg > 0) {
       if (wf >= tg - 0.2f) {
         if (!reachedAt) reachedAt = now;
-        if (now - reachedAt >= 200) { stopBrew(reachedAt); reachedAt = 0; return; }
+        if (now - reachedAt >= 200) {
+          if (!targetCue) {
+            targetCue = true;
+            if (curCfg().stopMode != 1) {   // filtro: avisa pero NO para el reloj
+              showToast("Objetivo alcanzado", 3000);
+              char title[40], body[120]; int s = (now - startMs) / 1000;
+              snprintf(title, sizeof title, "%s: objetivo alcanzado", curDef().name);
+              snprintf(body, sizeof body, "%.0f g en %d:%02d. El reloj sigue: para cuando termine de escurrir.", tg, s / 60, s % 60);
+              queueNote(title, body);
+            }
+          }
+          if (curCfg().stopMode == 1) { stopBrew(reachedAt); reachedAt = 0; return; }   // espresso: para al peso
+        }
       } else reachedAt = 0;
     }
+    // "Sin goteo": tras el objetivo, para cuando el caudal lleva 8 s por debajo de 0.4 g/s.
+    if (curCfg().stopMode == 2 && targetCue && now - lastFlowMs >= 8000) stopBrew(lastFlowMs);
     // Parada automatica (espresso): sin caudal durante 4 s tras haber salido >= 5 g.
     if (curDef().autoStop && shown >= 5.0f && now - lastFlowMs >= 4000) stopBrew(lastFlowMs);
   }
@@ -361,7 +376,7 @@ String menuLabel(int r) {
     case 1: return "Ratio";
     case 2: return "Tiempo min";
     case 3: return "Tiempo max";
-    case 4: return "Parar al peso";
+    case 4: return "Parar";
     case 5: return "Auto inicio";
     case 6: return "Avisos movil";
     case 7: return "Wi-Fi";
@@ -378,7 +393,7 @@ String menuValue(int r) {
     case 1: snprintf(b, sizeof b, "1:%.1f", editing ? draft : c.ratio); return b;
     case 2: return fmtT(editing ? int(draft) : c.tMin);
     case 3: return fmtT(editing ? int(draft) : c.tMax);
-    case 4: return c.stopAtWeight ? "SI" : "NO";
+    case 4: { const char *n[] = {"a mano", "al peso", "sin goteo"}; return n[c.stopMode % 3]; }
     case 5: return c.autoStart ? "SI" : "NO";
     case 6: return saved.notify ? "SI" : "NO";
     case 7: return WiFi.status() == WL_CONNECTED ? "conectado" : "sin red";
@@ -468,7 +483,7 @@ void handleInput(uint32_t now) {
         else if (menuRow == 1) { draft = c.ratio; state = EDIT; }
         else if (menuRow == 2) { draft = c.tMin; state = EDIT; }
         else if (menuRow == 3) { draft = c.tMax; state = EDIT; }
-        else if (menuRow == 4) { c.stopAtWeight = !c.stopAtWeight; saveCfg(); }
+        else if (menuRow == 4) { c.stopMode = (c.stopMode + 1) % 3; saveCfg(); }
         else if (menuRow == 5) { c.autoStart = !c.autoStart; saveCfg(); }
         else if (menuRow == 6) { saved.notify = !saved.notify; saveCfg(); wifiApply();
                                  if (saved.notify && WiFi.SSID().length() == 0) showToast("Falta configurar el Wi-Fi", 2500); }
@@ -550,7 +565,7 @@ void setup() {
   // Configuracion por defecto y carga desde flash.
   for (int i = 0; i < MODE_COUNT; i++)
     saved.m[i] = {MODES[i].dose, MODES[i].ratio, MODES[i].tMin, MODES[i].tMax, (uint8_t)MODES[i].autoStart,
-                  (uint8_t)(MODES[i].dose > 0)};   // parar al peso: activado en los modos con objetivo
+                  (uint8_t)(MODES[i].autoStop ? 1 : 0)};   // espresso/ristretto/lungo: al peso; filtro: a mano
   if (prefs.begin("coffee", false)) {
     Saved loaded;
     if (prefs.getBytesLength("cfg") == sizeof(loaded) &&
