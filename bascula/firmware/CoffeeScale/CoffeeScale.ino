@@ -9,6 +9,11 @@
 #error "Falta la configuracion de pantalla: deja build_opt.h junto al sketch y usa el core ESP32 3.x."
 #endif
 #include <Preferences.h>
+#include <WiFi.h>
+#include <WiFiManager.h>      // tzapu/WiFiManager: portal para configurar la red
+#include <esp_http_client.h>
+#include <esp_crt_bundle.h>
+#include <esp_system.h>
 #include <math.h>
 #include "TrackerSans-Bold15.h"
 #include "TrackerSans-Bold20.h"
@@ -49,11 +54,13 @@ constexpr int MODE_COUNT = sizeof(MODES) / sizeof(MODES[0]);
 
 struct ModeCfg { float dose, ratio; uint16_t tMin, tMax; uint8_t autoStart, stopAtWeight; };
 struct Saved {
-  uint32_t magic = 0x43463032;   // cambia al modificar la estructura guardada
+  uint32_t magic = 0x43463033;   // cambia al modificar la estructura guardada
   float cpg = 0;            // cuentas ADC por gramo (0 = sin calibrar)
   int32_t zeroRaw = 0;      // cero de la plataforma vacia
   uint8_t mode = 0;
   ModeCfg m[MODE_COUNT];
+  uint8_t notify = 0;       // avisos al movil (ntfy) activados
+  char topic[24] = {0};     // codigo secreto del canal ntfy (se genera en el primer arranque)
 };
 Saved saved;
 Preferences prefs;
@@ -122,7 +129,7 @@ float finalWeight = 0;
 String toast;
 int menuRow = 0, knownMass = 100;
 float draft = 0, calEmpty = 0;
-constexpr int MENU_ROWS = 8; // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Calibrar, Volver
+constexpr int MENU_ROWS = 11; // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Avisos movil, Wi-Fi, Codigo, Calibrar, Volver
 
 const ModeDef &curDef() { return MODES[saved.mode]; }
 ModeCfg &curCfg() { return saved.m[saved.mode]; }
@@ -178,12 +185,54 @@ float sampleRaw(int n) {
   return got == n ? float(sum / n) : NAN;
 }
 
+// ---------- Avisos al movil (ntfy.sh por Wi-Fi) ----------
+// La bascula publica un mensaje en https://ntfy.sh/<codigo>. En el iPhone, la app gratuita "ntfy"
+// suscrita a ese codigo muestra la notificacion. El envio va en una tarea aparte para no bloquear
+// ni el reloj ni la lectura de la bascula. El mensaje (modo, peso, tiempo) pasa por el servidor ntfy.sh.
+struct Note { char title[40]; char body[120]; };
+QueueHandle_t noteQ = nullptr;
+void notifyTask(void *) {
+  Note n;
+  for (;;) {
+    if (xQueueReceive(noteQ, &n, portMAX_DELAY) != pdTRUE) continue;
+    if (WiFi.status() != WL_CONNECTED) { Serial.println("ntfy: sin Wi-Fi, aviso descartado"); continue; }
+    char url[96]; snprintf(url, sizeof url, "https://ntfy.sh/%s", saved.topic);
+    esp_http_client_config_t cfgH = {};
+    cfgH.url = url; cfgH.method = HTTP_METHOD_POST;
+    cfgH.crt_bundle_attach = esp_crt_bundle_attach; cfgH.timeout_ms = 6000;
+    esp_http_client_handle_t h = esp_http_client_init(&cfgH);
+    if (!h) continue;
+    esp_http_client_set_header(h, "Title", n.title);   // solo ASCII (sin tildes)
+    esp_http_client_set_header(h, "Tags", "coffee");
+    esp_http_client_set_post_field(h, n.body, strlen(n.body));
+    esp_err_t e = esp_http_client_perform(h);
+    Serial.printf("ntfy: %s (HTTP %d)\n", e == ESP_OK ? "enviado" : "error", esp_http_client_get_status_code(h));
+    esp_http_client_cleanup(h);
+  }
+}
+void queueNote(const char *title, const char *body) {
+  if (!saved.notify || !noteQ) return;
+  Note n; snprintf(n.title, sizeof n.title, "%s", title); snprintf(n.body, sizeof n.body, "%s", body);
+  xQueueSend(noteQ, &n, 0);   // sin esperar: si la cola esta llena se descarta
+}
+void wifiApply() {            // enciende o apaga el Wi-Fi segun el ajuste
+  if (saved.notify) { WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(true); WiFi.setSleep(true); WiFi.begin(); }
+  else { WiFi.disconnect(true); WiFi.mode(WIFI_OFF); }
+}
+
 // ---------- Temporizador / preparacion ----------
 void startBrew(uint32_t at) {
   state = BREW; startMs = at; lastFlowMs = millis(); reachedAt = 0; armed = false; rising = false; dirty = true;
 }
 void stopBrew(uint32_t end) {
   endMs = end; finalWeight = shown; state = DONE; dirty = true;
+  const ModeCfg &c = curCfg(); int sec = (endMs - startMs) / 1000;
+  char title[40], body[120];
+  snprintf(title, sizeof title, "%s listo", curDef().name);
+  const char *v = targetG() <= 0 ? "" : sec < c.tMin ? " (rapido)" : sec > c.tMax ? " (lento)" : " (en tiempo)";
+  snprintf(body, sizeof body, "%.1f g en %d:%02d  Ratio 1:%.1f%s", finalWeight, sec / 60, sec % 60,
+           c.dose > 0 ? finalWeight / c.dose : 0.0f, v);
+  queueNote(title, body);
 }
 void resetToReady() { state = READY; armed = false; rising = false; dirty = true; }
 void changeMode(int steps) {
@@ -314,7 +363,10 @@ String menuLabel(int r) {
     case 3: return "Tiempo max";
     case 4: return "Parar al peso";
     case 5: return "Auto inicio";
-    case 6: return "Calibrar";
+    case 6: return "Avisos movil";
+    case 7: return "Wi-Fi";
+    case 8: return "Codigo";
+    case 9: return "Calibrar";
     default: return "Volver";
   }
 }
@@ -328,11 +380,15 @@ String menuValue(int r) {
     case 3: return fmtT(editing ? int(draft) : c.tMax);
     case 4: return c.stopAtWeight ? "SI" : "NO";
     case 5: return c.autoStart ? "SI" : "NO";
+    case 6: return saved.notify ? "SI" : "NO";
+    case 7: return WiFi.status() == WL_CONNECTED ? "conectado" : "sin red";
+    case 8: return String(saved.topic);
     default: return "";
   }
 }
 void drawMenu() {
   txt(String("Ajustes: ") + curDef().name, 8, 4, TrackerSansBold15, YELLOW);
+  if (millis() < toastUntil) txt(toast, 312, 6, TrackerSansRegular12, WHITE, TR_DATUM);
   const int visible = 5, pitch = 26, y0 = 30;
   int first = constrain(menuRow - 2, 0, MENU_ROWS - visible);
   for (int i = 0; i < visible; i++) {
@@ -371,6 +427,18 @@ void draw() {
 }
 
 // ---------- Entrada por estado ----------
+void runWifiPortal() {
+  cv.fillSprite(BLACK);
+  txt("Conecta el movil a la red", 160, 30, TrackerSansBold15, WHITE, TC_DATUM);
+  txt("CoffeeScale-Setup", 160, 54, TrackerSansBold15, YELLOW, TC_DATUM);
+  txt("clave: cafecafe", 160, 80, TrackerSansRegular12, WHITE, TC_DATUM);
+  txt("y abre 192.168.4.1 (3 min)", 160, 104, TrackerSansRegular12, WHITE, TC_DATUM);
+  cv.pushSprite(0, 0);
+  WiFiManager wm; wm.setConfigPortalTimeout(180); wm.setConnectTimeout(20);
+  bool ok = wm.startConfigPortal("CoffeeScale-Setup", "cafecafe");   // bloquea hasta terminar o caducar
+  wifiApply();
+  showToast(ok ? "Wi-Fi conectado" : "Wi-Fi sin cambios", 2500);
+}
 void openMenu() { state = MENU; menuRow = 0; dirty = true; }
 void handleInput(uint32_t now) {
   int steps = takeSteps(), e = encBtn.poll(), b = blueBtn.poll();
@@ -402,7 +470,11 @@ void handleInput(uint32_t now) {
         else if (menuRow == 3) { draft = c.tMax; state = EDIT; }
         else if (menuRow == 4) { c.stopAtWeight = !c.stopAtWeight; saveCfg(); }
         else if (menuRow == 5) { c.autoStart = !c.autoStart; saveCfg(); }
-        else if (menuRow == 6) state = CAL_EMPTY;
+        else if (menuRow == 6) { saved.notify = !saved.notify; saveCfg(); wifiApply();
+                                 if (saved.notify && WiFi.SSID().length() == 0) showToast("Falta configurar el Wi-Fi", 2500); }
+        else if (menuRow == 7) runWifiPortal();
+        else if (menuRow == 8) showToast(String("ntfy: ") + saved.topic, 5000);
+        else if (menuRow == 9) state = CAL_EMPTY;
         else resetToReady();
       }
       break;
@@ -485,6 +557,14 @@ void setup() {
         prefs.getBytes("cfg", &loaded, sizeof(loaded)) == sizeof(loaded) &&
         loaded.magic == saved.magic && loaded.mode < MODE_COUNT && isfinite(loaded.cpg)) saved = loaded;
   }
+  if (saved.topic[0] == 0) {   // codigo secreto de 64 bits en el primer arranque
+    snprintf(saved.topic, sizeof saved.topic, "cafe-%08x%08x", (unsigned)esp_random(), (unsigned)esp_random());
+    saveCfg();
+  }
+  Serial.printf("Codigo ntfy: %s\n", saved.topic);
+  noteQ = xQueueCreate(4, sizeof(Note));
+  xTaskCreatePinnedToCore(notifyTask, "ntfy", 8192, nullptr, 1, nullptr, 0);
+  wifiApply();
   tareRaw = saved.zeroRaw;
 
   scale.begin(HX_DT, HX_SCK, true, false);   // timing ESP32, sin reset bloqueante

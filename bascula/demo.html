@@ -63,6 +63,14 @@
   .speed button { border:0; background:#faf8f3; padding:9px 12px; cursor:pointer; }
   .speed button.on { background:#2b2b2b; color:#fff; }
   .note { font-size:12px; color:#888; margin-top:6px; }
+  #phone { position:fixed; top:12px; right:12px; width:min(340px, calc(100vw - 24px)); display:flex; gap:10px; padding:12px 14px;
+    background:rgba(250,250,252,.96); border-radius:18px; box-shadow:0 8px 30px rgba(0,0,0,.25); transform:translateY(-140%);
+    transition: transform .45s cubic-bezier(.2,.9,.3,1.1); z-index:10; }
+  #phone.show { transform:none; }
+  #phone .ico { width:38px; height:38px; border-radius:9px; background:#57a773; display:grid; place-items:center; font-size:20px; flex:none; }
+  #phone .app { font-size:11px; color:#777; letter-spacing:.03em; }
+  #phone .ttl { font-weight:600; font-size:14px; }
+  #phone .bod { font-size:13px; color:#333; }
 </style>
 </head>
 <body>
@@ -107,6 +115,14 @@
       </div>
 
       <div class="card">
+        <h2>Avisos al móvil (Wi-Fi + app ntfy)</h2>
+        <div class="row" style="align-items:center">
+          <label style="font-size:14px;display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="notifyChk" checked> Enviar aviso al terminar</label>
+        </div>
+        <p class="note">Al parar el reloj, la báscula publica el resultado en un canal secreto de ntfy.sh y tu iPhone lo muestra como notificación. En el aparato real: <b>Ajustes → Wi-Fi</b> para unirla a tu red y <b>Código</b> para ver el canal al que suscribirte en la app ntfy. El texto del aviso (modo, peso, tiempo) pasa por el servidor ntfy.sh.</p>
+      </div>
+
+      <div class="card">
         <h2>Simular una preparación</h2>
         <ol class="steps">
           <li>Elige el modo girando el pomo.</li>
@@ -124,6 +140,7 @@
     </div>
   </div>
 </main>
+<div id="phone" aria-live="polite"><div class="ico">☕</div><div class="txt"><div class="app">NTFY · ahora</div><div class="ttl" id="phTitle"></div><div class="bod" id="phBody"></div></div></div>
 
 <script>
 // ---------- Datos (iguales al firmware) ----------
@@ -148,7 +165,8 @@ let reachedAt = 0, startMs = 0, endMs = 0, lastFlowMs = 0, finalWeight = 0;
 let tareG = 0, wf = 0, shown = 0, flow = 0, haveW = false;
 let hist = [], toast = "", toastUntil = 0;
 let menuRow = 0, draft = 0;
-const MENU_ROWS = 8;   // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Calibrar, Volver
+const MENU_ROWS = 11;  // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Avisos movil, Wi-Fi, Codigo, Calibrar, Volver
+let notifyOn = true; const TOPIC = "cafe-7f3a9c21e8b04d56";   // código de ejemplo
 
 // ---------- Simulación física ----------
 let cupOn = false, cupMass = 185, liquid = 0;
@@ -218,7 +236,7 @@ function doTare() {
 }
 function startBrew(at) { reachedAt = 0; state = "BREW"; startMs = at; lastFlowMs = simNow; armed = false; rising = false; }
 function stopBrew(end) { endMs = end; finalWeight = shown; state = "DONE"; doneRT = performance.now();
-  const c = cfg[mode], sec = Math.floor((end - startMs) / 1000); doneInWindow = targetG() > 0 && sec >= c.tMin && sec <= c.tMax; burst(doneInWindow); }
+  const c = cfg[mode], sec = Math.floor((end - startMs) / 1000); doneInWindow = targetG() > 0 && sec >= c.tMin && sec <= c.tMax; burst(doneInWindow); phoneNotice(); }
 function resetToReady() { state = "READY"; armed = false; rising = false; }
 function changeMode(steps) { modeChangedRT = performance.now(); mode = ((mode + steps) % MODES.length + MODES.length) % MODES.length; }
 function brewLogic() {
@@ -265,7 +283,10 @@ function pressKnob() {
     else if (menuRow === 3) { draft = c.tMax; state = "EDIT"; }
     else if (menuRow === 4) c.stopAtWeight = !c.stopAtWeight;
     else if (menuRow === 5) c.autoStart = !c.autoStart;
-    else if (menuRow === 6) { showToast("Calibración: solo en el aparato real", 2500); }
+    else if (menuRow === 6) { notifyOn = !notifyOn; syncNotifyUI(); }
+    else if (menuRow === 7) showToast("Wi-Fi: se configura en el aparato", 2500);
+    else if (menuRow === 8) showToast("ntfy: " + TOPIC, 5000);
+    else if (menuRow === 9) { showToast("Calibración: solo en el aparato real", 2500); }
     else resetToReady();
   } else if (state === "EDIT") {
     if (menuRow === 0) c.dose = draft; else if (menuRow === 1) c.ratio = draft;
@@ -381,7 +402,7 @@ function drawMain(now) {
     g.fillStyle = `rgba(${colr},${0.12 * (1 - pr)})`; g.fillRect(0, 0, 320, 172);
   }
 }
-function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Parar al peso","Auto inicio","Calibrar","Volver"][r]; }
+function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Parar al peso","Auto inicio","Avisos movil","Wi-Fi","Codigo","Calibrar","Volver"][r]; }
 function menuValue(r) {
   const c = cfg[mode], ed = state === "EDIT" && r === menuRow;
   switch (r) {
@@ -391,6 +412,9 @@ function menuValue(r) {
     case 3: return fmtT(ed ? Math.round(draft) : c.tMax);
     case 4: return c.stopAtWeight ? "SI" : "NO";
     case 5: return c.autoStart ? "SI" : "NO";
+    case 6: return notifyOn ? "SI" : "NO";
+    case 7: return "conectado";
+    case 8: return TOPIC;
     default: return "";
   }
 }
@@ -489,6 +513,18 @@ document.addEventListener("keydown", e => {
   g.innerHTML = html;
 })();
 
+function syncNotifyUI() { document.getElementById("notifyChk").checked = notifyOn; }
+document.getElementById("notifyChk").onchange = e => { notifyOn = e.target.checked; };
+let phoneTimer = null;
+function phoneNotice() {
+  if (!notifyOn) return;
+  const c = cfg[mode], sec = Math.floor((endMs - startMs) / 1000), tg = targetG();
+  const v = tg <= 0 ? "" : sec < c.tMin ? " (rapido)" : sec > c.tMax ? " (lento)" : " (en tiempo)";
+  document.getElementById("phTitle").textContent = c.name + " listo";
+  document.getElementById("phBody").textContent = `${finalWeight.toFixed(1)} g en ${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}  Ratio 1:${(c.dose > 0 ? finalWeight / c.dose : 0).toFixed(1)}${v}`;
+  const ph = document.getElementById("phone"); ph.classList.add("show");
+  clearTimeout(phoneTimer); phoneTimer = setTimeout(() => ph.classList.remove("show"), 6000);
+}
 setStatus("Listo.");
 (document.fonts && document.fonts.load ? document.fonts.load('110px "Jersey 10"') : Promise.resolve()).catch(()=>{}).finally(() => requestAnimationFrame(loop));
 </script>
