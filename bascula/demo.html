@@ -296,58 +296,89 @@ function fmtT(s) { return s < 100 ? s + "s" : Math.floor(s/60) + ":" + String(s%
 function text(s, x, y, size, color, align="left", weight="bold", font=FONT) {
   g.font = `${weight} ${size}px ${font}`; g.fillStyle = color; g.textAlign = align; g.textBaseline = "top"; g.fillText(s, x, y);
 }
-// ---------- Pantalla minimalista: tiempo, peso y una línea de progreso ----------
+// ---------- Pantalla: minimalista con un nivel de café animado ----------
 let modeChangedRT = -1e9, tareRT = -1e9, doneRT = -1e9, doneInWindow = false;
-let fracShown = 0, lastRT = performance.now();
+let fracShown = 0, lastRT = performance.now(), lastSec = -1, secRT = -1e9, nextBubble = 0;
+let bubbles = [];
+const rnd = (a, b) => a + Math.random() * (b - a);
 const ease = t => { t = Math.min(1, Math.max(0, t)); return t*t*(3-2*t); };
-function burst() {}   // sin destellos: la pantalla es minimalista
-const GREYTXT = "#8a8a8a", DIM = "#2a2a2a";
+function burst() {}   // sin partículas: el aviso de objetivo es un pulso suave
+const GREYTXT = "#9a9a9a";
 
 function drawMain(now) {
   const rt = performance.now(), dt = Math.min(0.05, (rt - lastRT) / 1000); lastRT = rt;
   const c = cfg[mode], target = targetG();
   const frac = target > 0 ? Math.max(0, shown) / target : 0;
-  fracShown += (Math.min(frac, 1.15) - fracShown) * Math.min(1, dt * 7);   // suaviza el avance
+  const flowNow = Math.max(0, flow), running = state === "BREW";
+  fracShown += (Math.min(frac, 1.0) - fracShown) * Math.min(1, dt * 6);          // el nivel sube suave
   g.fillStyle = "#000"; g.fillRect(0, 0, 320, 172);
 
-  // cabecera discreta: modo (aparece con un fundido) y objetivo
-  const k = ease((rt - modeChangedRT) / 220);
-  g.globalAlpha = 0.2 + 0.8 * k; text(c.name, 14, 10, 13, GREYTXT, "left", "normal"); g.globalAlpha = 1;
-  if (target > 0) text(`${c.dose.toFixed(0)} > ${target.toFixed(0)} g   ${fmtT(c.tMin)}–${fmtT(c.tMax)}`, 306, 11, 12, "#5a5a5a", "right", "normal");
+  // ---- nivel de café: color plano, onda suave y línea de crema ----
+  const over = target > 0 && frac > 1.02;
+  const surface = 172 - (172 - 6) * fracShown;
+  if (fracShown > 0.004) {
+    const amp = 1.2 + Math.min(3.2, running ? flowNow * 1.0 : 0);
+    const col = over ? "#3a1410" : (state === "DONE" && doneInWindow ? "#10301a" : "#2b1b0e");
+    const ys = x => surface + amp * Math.sin(x * 0.045 + rt * 0.003) + 0.6 * amp * Math.sin(x * 0.11 - rt * 0.005);
+    g.fillStyle = col; g.beginPath(); g.moveTo(0, 172);
+    for (let x = 0; x <= 320; x += 4) g.lineTo(x, ys(x));
+    g.lineTo(320, 172); g.closePath(); g.fill();
+    // crema
+    g.lineWidth = 2; g.strokeStyle = over ? "#d8564a" : (state === "DONE" && doneInWindow ? "#3fd36a" : "#c88a46");
+    g.beginPath(); for (let x = 0; x <= 320; x += 4) { const y = ys(x); if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); } g.stroke();
+    g.globalAlpha = 0.25; g.lineWidth = 1; g.beginPath();
+    for (let x = 0; x <= 320; x += 4) { const y = ys(x) + 6; if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); } g.stroke(); g.globalAlpha = 1;
+    // pocas burbujas suaves
+    if (running && flowNow > 0.5 && bubbles.length < 9 && rt > nextBubble) { bubbles.push({x: rnd(30, 290), y: 172, r: rnd(1.2, 2.6), ph: rnd(0, 6)}); nextBubble = rt + 260; }
+    g.strokeStyle = "rgba(255,225,180,.35)"; g.lineWidth = 1;
+    for (const bb of bubbles) { bb.y -= (16 + bb.r * 5) * dt; bb.x += Math.sin(rt * 0.004 + bb.ph) * 5 * dt; g.beginPath(); g.arc(bb.x, bb.y, bb.r, 0, 7); g.stroke(); }
+    bubbles = bubbles.filter(bb => bb.y > surface + 4);
+  } else bubbles = [];
 
-  // tiempo
-  const ms = state === "BREW" ? now - startMs : state === "DONE" ? endMs - startMs : 0;
+  // ---- cabecera ----
+  const k = ease((rt - modeChangedRT) / 240);
+  g.globalAlpha = 0.2 + 0.8 * k; text(c.name, 14 + (1 - k) * 22, 10, 13, "#cfcfcf", "left", "normal"); g.globalAlpha = 1;
+  if (target > 0) text(`${c.dose.toFixed(0)} > ${target.toFixed(0)} g   ${fmtT(c.tMin)}–${fmtT(c.tMax)}`, 306, 11, 12, "#8a8a8a", "right", "normal");
+
+  // ---- tiempo (un pequeño salto cada segundo) ----
+  const ms = running ? now - startMs : state === "DONE" ? endMs - startMs : 0;
   const sec = Math.floor(ms / 1000), tenth = Math.floor(ms / 100) % 10;
+  if (sec !== lastSec) { lastSec = sec; secRT = rt; }
   let tcol = "#fff";
-  if (target > 0 && (state === "BREW" || state === "DONE")) { if (sec > c.tMax) tcol = C.RED; else if (sec >= c.tMin) tcol = C.GREEN; }
+  if (target > 0 && (running || state === "DONE")) { if (sec > c.tMax) tcol = C.RED; else if (sec >= c.tMin) tcol = C.GREEN; }
   const tb = String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0");
   g.font = `100px ${FONT_BIG}`; const tw = g.measureText(tb).width, tx = (320 - tw) / 2;
-  text(tb, tx, 20, 100, tcol, "left", "normal", FONT_BIG);
-  if (state === "BREW" || state === "DONE") text("." + tenth, tx + tw + 4, 86, 16, "#5a5a5a", "left", "normal");
+  const tick = running ? (1 - ease((rt - secRT) / 170)) * 3 : 0;
+  const dp = state === "DONE" ? Math.max(0, 1 - (rt - doneRT) / 450) : 0;           // "pop" al terminar
+  g.save(); g.translate(160, 66); const sc = 1 + 0.06 * Math.sin(Math.PI * dp); g.scale(sc, sc); g.translate(-160, -66);
+  text(tb, tx, 20 - tick, 100, tcol, "left", "normal", FONT_BIG);
+  g.restore();
+  if (running || state === "DONE") text("." + tenth, tx + tw + 4, 86, 16, "#8a8a8a", "left", "normal");
 
-  // peso (izquierda) y caudal / ratio (derecha)
+  // ---- peso y caudal / ratio ----
   const t = Math.round(Math.abs(shown) * 10), ip = ((shown < 0 && t > 0) ? "-" : "") + Math.floor(t / 10);
   g.font = `bold 26px ${FONT}`; const w1 = g.measureText(ip).width;
-  text(ip, 14, 120, 26, "#fff");
-  g.fillStyle = "#fff"; g.fillRect(14 + w1 + 3, 140, 3, 3);
-  text(String(t % 10), 14 + w1 + 9, 120, 26, "#fff");
-  g.font = `bold 26px ${FONT}`; const w2 = g.measureText(String(t % 10)).width;
-  text("g", 14 + w1 + 14 + w2, 130, 14, GREYTXT);
+  text(ip, 14, 126, 26, "#fff");
+  g.fillStyle = "#fff"; g.fillRect(14 + w1 + 3, 146, 3, 3);
+  text(String(t % 10), 14 + w1 + 9, 126, 26, "#fff");
+  const w2 = g.measureText(String(t % 10)).width;
+  text("g", 14 + w1 + 14 + w2, 136, 14, GREYTXT);
   let right = "";
   if (now < toastUntil) right = toast;
-  else if (state === "BREW") right = Math.max(flow, 0).toFixed(1) + " g/s";
+  else if (running) right = flowNow.toFixed(1) + " g/s";
   else if (state === "DONE" && c.dose > 0) right = "1:" + (finalWeight / c.dose).toFixed(1);
-  if (right) text(right, 306, 128, 15, GREYTXT, "right", "normal");
-  // punto de estado: tara hecha (listo para arrancar solo)
-  if (state === "READY") { g.beginPath(); g.arc(160, 18, 3, 0, 7); if (armed && c.autoStart) { g.fillStyle = C.GREEN; g.fill(); } else { g.strokeStyle = "#555"; g.lineWidth = 1.5; g.stroke(); } }
+  if (right) text(right, 306, 134, 15, "#d0d0d0", "right", "normal");
+  if (state === "READY") { g.beginPath(); g.arc(160, 18, 3, 0, 7); if (armed && c.autoStart) { g.fillStyle = C.GREEN; g.fill(); } else { g.strokeStyle = "#777"; g.lineWidth = 1.5; g.stroke(); } }
 
-  // línea de progreso hacia el peso objetivo
-  const x0 = 14, w = 292, y = 160;
-  g.fillStyle = DIM; g.fillRect(x0, y, w, 2);
-  if (target > 0) {
-    const col = frac > 1.02 ? C.RED : frac >= 0.98 ? C.GREEN : "#fff";
-    g.fillStyle = col; g.fillRect(x0, y, Math.min(w, w * fracShown), 2);
-    g.fillStyle = "#666"; g.fillRect(x0 + w - 1, y - 3, 2, 8);   // marca del objetivo
+  // ---- tara: aro azul alrededor del peso ----
+  const tt = (rt - tareRT) / 600;
+  if (tt >= 0 && tt < 1) { g.strokeStyle = `rgba(80,150,255,${1 - tt})`; g.lineWidth = 2; g.beginPath(); g.roundRect(10 - tt * 6, 120 - tt * 6, 80 + tt * 12, 34 + tt * 12, 8); g.stroke(); }
+  // ---- objetivo alcanzado: pulso (aro que se expande y destello suave) ----
+  const pr = (rt - doneRT) / 800;
+  if (state === "DONE" && target > 0 && pr >= 0 && pr < 1) {
+    const colr = doneInWindow ? "63,211,106" : "255,140,60";
+    g.strokeStyle = `rgba(${colr},${0.9 * (1 - pr)})`; g.lineWidth = 3; g.beginPath(); g.arc(160, 86, 20 + pr * 190, 0, 7); g.stroke();
+    g.fillStyle = `rgba(${colr},${0.12 * (1 - pr)})`; g.fillRect(0, 0, 320, 172);
   }
 }
 function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Parar al peso","Auto inicio","Calibrar","Volver"][r]; }
