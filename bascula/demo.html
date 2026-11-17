@@ -153,7 +153,10 @@ const MODES = [
   {name:"Prensa francesa", dose:30, ratio:15,   tMin:230, tMax:250, autoStart:true,  autoStop:false, kind:"pour"},
   {name:"Libre",           dose:0,  ratio:0,    tMin:0,   tMax:0,   autoStart:false, autoStop:false, kind:"pour"},
 ];
-const cfg = MODES.map(m => ({...m, stopAtWeight: m.dose > 0}));   // parar al llegar al peso objetivo
+// Cómo se para el reloj: 0 = a mano (botón azul), 1 = al llegar al peso, 2 = cuando deja de gotear.
+// En espresso se para al peso. En filtro el peso solo avisa: el reloj sigue hasta que termina de escurrir.
+const STOP_NAMES = ["a mano", "al peso", "sin goteo"];
+const cfg = MODES.map(m => ({...m, stopMode: m.kind === "shot" ? 1 : 0}));
 const C = {BLACK:"#000", WHITE:"#fff", GREY:"#7b7d7b", DARK:"#202420", YELLOW:"#f5d400", GREEN:"#22dd00",
            RED:"#f00000", COFFEE:"#5a3a18", COFFEE_OVER:"#8a2828", CREMA:"#cc8c44"};
 
@@ -161,7 +164,7 @@ const C = {BLACK:"#000", WHITE:"#fff", GREY:"#7b7d7b", DARK:"#202420", YELLOW:"#
 let simNow = 0, speed = 1;
 let state = "READY";            // READY, BREW, DONE, MENU, EDIT, CAL
 let mode = 0, armed = false, rising = false, riseAt = 0;
-let reachedAt = 0, startMs = 0, endMs = 0, lastFlowMs = 0, finalWeight = 0;
+let targetCue = false, targetCueRT = -1e9, reachedAt = 0, startMs = 0, endMs = 0, lastFlowMs = 0, finalWeight = 0;
 let tareG = 0, wf = 0, shown = 0, flow = 0, haveW = false;
 let hist = [], toast = "", toastUntil = 0;
 let menuRow = 0, draft = 0;
@@ -234,7 +237,7 @@ function doTare() {
   tareRT = performance.now(); tareG = sensorRaw; shown = wf = 0; hist = []; flow = 0; armed = true; rising = false;
   showToast("Tara", 900);
 }
-function startBrew(at) { reachedAt = 0; state = "BREW"; startMs = at; lastFlowMs = simNow; armed = false; rising = false; }
+function startBrew(at) { reachedAt = 0; targetCue = false; state = "BREW"; startMs = at; lastFlowMs = simNow; armed = false; rising = false; }
 function stopBrew(end) { endMs = end; finalWeight = shown; state = "DONE"; doneRT = performance.now();
   const c = cfg[mode], sec = Math.floor((end - startMs) / 1000); doneInWindow = targetG() > 0 && sec >= c.tMin && sec <= c.tMax; burst(doneInWindow); phoneNotice(); }
 function resetToReady() { state = "READY"; armed = false; rising = false; }
@@ -248,12 +251,19 @@ function brewLogic() {
     } else rising = false;
   } else if (state === "BREW") {
     if (flow >= 0.4) lastFlowMs = simNow;
-    // Parar al peso: al alcanzar el objetivo (con 0.2 g de margen, sostenido 200 ms) se para el reloj.
+    // Objetivo alcanzado (con 0.2 g de margen, sostenido 200 ms).
     const tg = targetG();
-    if (c.stopAtWeight && tg > 0) {
-      if (wf >= tg - 0.2) { if (!reachedAt) reachedAt = simNow; if (simNow - reachedAt >= 200) { stopBrew(reachedAt); reachedAt = 0; return; } }
-      else reachedAt = 0;
+    if (tg > 0) {
+      if (wf >= tg - 0.2) {
+        if (!reachedAt) reachedAt = simNow;
+        if (simNow - reachedAt >= 200) {
+          if (!targetCue) { targetCue = true; targetCueRT = performance.now(); if (c.stopMode !== 1) targetNotice(); }
+          if (c.stopMode === 1) { stopBrew(reachedAt); reachedAt = 0; return; }   // espresso: para al peso
+        }
+      } else reachedAt = 0;
     }
+    // "Sin goteo": tras el objetivo, para cuando el caudal lleva 8 s sin pasar de 0.4 g/s.
+    if (c.stopMode === 2 && targetCue && simNow - lastFlowMs >= 8000) stopBrew(lastFlowMs);
     // Parada por falta de caudal (solo espresso y similares)
     if (c.autoStop && shown >= 5 && simNow - lastFlowMs >= 4000) stopBrew(lastFlowMs);
   }
@@ -281,7 +291,7 @@ function pressKnob() {
     else if (menuRow === 1) { draft = c.ratio; state = "EDIT"; }
     else if (menuRow === 2) { draft = c.tMin; state = "EDIT"; }
     else if (menuRow === 3) { draft = c.tMax; state = "EDIT"; }
-    else if (menuRow === 4) c.stopAtWeight = !c.stopAtWeight;
+    else if (menuRow === 4) c.stopMode = (c.stopMode + 1) % 3;
     else if (menuRow === 5) c.autoStart = !c.autoStart;
     else if (menuRow === 6) { notifyOn = !notifyOn; syncNotifyUI(); }
     else if (menuRow === 7) showToast("Wi-Fi: se configura en el aparato", 2500);
@@ -345,7 +355,7 @@ function drawMain(now) {
     for (let x = 0; x <= 320; x += 4) g.lineTo(x, ys(x));
     g.lineTo(320, 172); g.closePath(); g.fill();
     // crema
-    g.lineWidth = 2; g.strokeStyle = over ? "#d8564a" : (state === "DONE" && doneInWindow ? "#3fd36a" : "#c88a46");
+    g.lineWidth = 2; g.strokeStyle = over ? "#d8564a" : ((state === "DONE" && doneInWindow) || (running && targetCue) ? "#3fd36a" : "#c88a46");
     g.beginPath(); for (let x = 0; x <= 320; x += 4) { const y = ys(x); if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); } g.stroke();
     g.globalAlpha = 0.25; g.lineWidth = 1; g.beginPath();
     for (let x = 0; x <= 320; x += 4) { const y = ys(x) + 6; if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); } g.stroke(); g.globalAlpha = 1;
@@ -386,6 +396,7 @@ function drawMain(now) {
   text("g", 14 + w1 + 14 + w2, 136, 14, GREYTXT);
   let right = "";
   if (now < toastUntil) right = toast;
+  else if (running && targetCue && c.stopMode !== 1) right = "objetivo";
   else if (running) right = flowNow.toFixed(1) + " g/s";
   else if (state === "DONE" && c.dose > 0) right = "1:" + (finalWeight / c.dose).toFixed(1);
   if (right) text(right, 306, 134, 15, "#d0d0d0", "right", "normal");
@@ -394,6 +405,9 @@ function drawMain(now) {
   // ---- tara: aro azul alrededor del peso ----
   const tt = (rt - tareRT) / 600;
   if (tt >= 0 && tt < 1) { g.strokeStyle = `rgba(80,150,255,${1 - tt})`; g.lineWidth = 2; g.beginPath(); g.roundRect(10 - tt * 6, 120 - tt * 6, 80 + tt * 12, 34 + tt * 12, 8); g.stroke(); }
+  // ---- objetivo alcanzado con el reloj en marcha (filtro): aro verde, sin parar ----
+  const cr = (rt - targetCueRT) / 800;
+  if (running && cr >= 0 && cr < 1) { g.strokeStyle = `rgba(63,211,106,${0.9 * (1 - cr)})`; g.lineWidth = 3; g.beginPath(); g.arc(160, 86, 20 + cr * 190, 0, 7); g.stroke(); }
   // ---- objetivo alcanzado: pulso (aro que se expande y destello suave) ----
   const pr = (rt - doneRT) / 800;
   if (state === "DONE" && target > 0 && pr >= 0 && pr < 1) {
@@ -402,7 +416,7 @@ function drawMain(now) {
     g.fillStyle = `rgba(${colr},${0.12 * (1 - pr)})`; g.fillRect(0, 0, 320, 172);
   }
 }
-function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Parar al peso","Auto inicio","Avisos movil","Wi-Fi","Codigo","Calibrar","Volver"][r]; }
+function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Parar","Auto inicio","Avisos movil","Wi-Fi","Codigo","Calibrar","Volver"][r]; }
 function menuValue(r) {
   const c = cfg[mode], ed = state === "EDIT" && r === menuRow;
   switch (r) {
@@ -410,7 +424,7 @@ function menuValue(r) {
     case 1: return "1:" + (ed ? draft : c.ratio).toFixed(1);
     case 2: return fmtT(ed ? Math.round(draft) : c.tMin);
     case 3: return fmtT(ed ? Math.round(draft) : c.tMax);
-    case 4: return c.stopAtWeight ? "SI" : "NO";
+    case 4: return STOP_NAMES[c.stopMode];
     case 5: return c.autoStart ? "SI" : "NO";
     case 6: return notifyOn ? "SI" : "NO";
     case 7: return "conectado";
@@ -463,10 +477,10 @@ function autoStep() {
   else if (auto.phase === 2 && simNow - auto.t > 1200) { startScenario(); auto.phase = 3; }
   else if (auto.phase === 3 && !scenario) {
     // En espresso la parada es automática; en el resto pulsamos azul tras un momento.
-    if (state === "BREW" && !cfg[mode].autoStop && !cfg[mode].stopAtWeight) { auto.t = simNow; auto.phase = 4; }
+    if (state === "BREW" && cfg[mode].stopMode !== 1) { auto.phase = 4; }
     else if (state === "DONE") { auto = null; setStatus("Demo terminada: mira el resumen en pantalla."); }
   }
-  else if (auto.phase === 4 && simNow - auto.t > 4000) { blueShort(); auto = null; setStatus("Demo terminada: mira el resumen en pantalla."); }
+  else if (auto.phase === 4 && state === "BREW" && (simNow - startMs) / 1000 >= (cfg[mode].tMin + cfg[mode].tMax) / 2) { blueShort(); auto = null; setStatus("Demo terminada: mira el resumen en pantalla."); }
 }
 function setStatus(s) { document.getElementById("status").textContent = s + "  |  Taza en la plataforma: " + (cupOn ? "sí" : "no") + "."; }
 
@@ -516,6 +530,14 @@ document.addEventListener("keydown", e => {
 function syncNotifyUI() { document.getElementById("notifyChk").checked = notifyOn; }
 document.getElementById("notifyChk").onchange = e => { notifyOn = e.target.checked; };
 let phoneTimer = null;
+function targetNotice() {
+  if (!notifyOn) return;
+  const c = cfg[mode], sec = Math.floor((simNow - startMs) / 1000);
+  document.getElementById("phTitle").textContent = c.name + ": objetivo alcanzado";
+  document.getElementById("phBody").textContent = `${targetG().toFixed(0)} g en ${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}. El reloj sigue: para cuando termine de escurrir.`;
+  const ph = document.getElementById("phone"); ph.classList.add("show");
+  clearTimeout(phoneTimer); phoneTimer = setTimeout(() => ph.classList.remove("show"), 6000);
+}
 function phoneNotice() {
   if (!notifyOn) return;
   const c = cfg[mode], sec = Math.floor((endMs - startMs) / 1000), tg = targetG();
