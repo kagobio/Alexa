@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báscula de café: demo interactiva</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jersey+10&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f4f0ea; --ink:#222; --red:#d62d2d; --yellow:#f5c518; --blue:#2a6fdb; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 18px; color:#555; font-size: 14px; }
+  .grid { display:grid; grid-template-columns: 380px 1fr; gap: 28px; align-items:start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; justify-items:center; } }
+
+  /* Dispositivo (vista superior) */
+  .device { position:relative; width:360px; height:510px; border-radius:46px; background:#e9e9ea;
+    box-shadow: 0 1px 0 #fff inset, 0 18px 30px rgba(0,0,0,.18), 0 2px 0 #bfbfc2; padding:14px; }
+  .plate { position:absolute; left:20px; right:20px; top:20px; height:344px; border-radius:30px; background:#f4f1e8;
+    overflow:hidden; box-shadow: inset 0 0 0 1px #d9d5c8; }
+  .plate svg { position:absolute; inset:0; width:100%; height:100%; }
+  .cup { position:absolute; left:50%; top:50%; width:120px; height:120px; margin:-60px 0 0 -60px; border-radius:50%;
+    background:#fafafa; box-shadow: 0 4px 10px rgba(0,0,0,.35), inset 0 0 0 5px #fff, inset 0 0 0 7px #ddd;
+    transition: opacity .25s, transform .25s; opacity:0; transform: scale(.85); pointer-events:none; }
+  .cup.on { opacity:1; transform:none; }
+  .cup .coffee { position:absolute; inset:14px; border-radius:50%; background:#4a2a10; opacity:0; transition: opacity .2s; }
+  .strip { position:absolute; left:20px; right:20px; bottom:20px; height:128px; border-radius:64px; background:#16161a; }
+  .screenwrap { position:absolute; left:50%; top:50%; width:126px; height:68px; margin:-34px 0 0 -63px; border-radius:6px;
+    background:#000; box-shadow: 0 0 0 3px #26262c; overflow:hidden; }
+  .screenwrap canvas { width:100%; height:100%; display:block; image-rendering:auto; }
+  .knob { position:absolute; left:14px; top:50%; width:80px; height:80px; margin-top:-40px; border-radius:50%;
+    background: radial-gradient(circle at 40% 35%, #ffd84a, var(--yellow) 60%, #d9a400); border:0; cursor:pointer;
+    box-shadow: 0 6px 12px rgba(0,0,0,.4), inset 0 0 0 4px rgba(255,255,255,.25); transition: transform .12s; }
+  .knob::before { content:""; position:absolute; inset:-5px; border-radius:50%;
+    background: repeating-conic-gradient(from 0deg, rgba(0,0,0,.12) 0 6deg, transparent 6deg 30deg); mask: radial-gradient(circle, transparent 54%, #000 56%); -webkit-mask: radial-gradient(circle, transparent 54%, #000 56%); }
+  .knob .mark { position:absolute; left:50%; top:9px; width:6px; height:18px; margin-left:-3px; border-radius:3px; background:rgba(0,0,0,.35); }
+  .knob:active { transform: scale(.96); }
+  .bbtn { position:absolute; right:22px; top:50%; width:52px; height:52px; margin-top:-26px; border-radius:50%; border:0; cursor:pointer;
+    background: radial-gradient(circle at 40% 35%, #5b95f0, var(--blue) 65%, #1d52a8); box-shadow: 0 4px 8px rgba(0,0,0,.45); }
+  .bbtn:active { transform: scale(.94); }
+  .usb { position:absolute; left:50%; top:-10px; width:26px; height:14px; margin-left:-13px; background:#fff; border-radius:3px 3px 0 0; }
+
+  /* Panel derecho */
+  .panel { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .card { background:#fff; border-radius:14px; padding:14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { font-size:13px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.06em; color:#777; }
+  .lupa { width:100%; max-width:640px; background:#000; border-radius:12px; overflow:hidden; box-shadow:0 0 0 4px #26262c; }
+  .lupa canvas { width:100%; display:block; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  button.t { font:inherit; font-size:14px; padding:9px 14px; border-radius:10px; border:1px solid #d6d1c6; background:#faf8f3; cursor:pointer; }
+  button.t:hover { background:#f0ece2; }
+  button.t.pri { background:#2b2b2b; color:#fff; border-color:#2b2b2b; }
+  button.t.pri:hover { background:#444; }
+  button.t:disabled { opacity:.45; cursor:default; }
+  .steps { margin:0; padding-left:18px; font-size:14px; line-height:1.6; color:#444; }
+  .hint { font-size:13px; color:#666; line-height:1.5; }
+  kbd { background:#eee; border:1px solid #ccc; border-bottom-width:2px; border-radius:4px; padding:0 5px; font-size:12px; }
+  select, .speed button { font:inherit; font-size:14px; }
+  .speed { display:inline-flex; border:1px solid #d6d1c6; border-radius:10px; overflow:hidden; }
+  .speed button { border:0; background:#faf8f3; padding:9px 12px; cursor:pointer; }
+  .speed button.on { background:#2b2b2b; color:#fff; }
+  .note { font-size:12px; color:#888; margin-top:6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Báscula de café: demo interactiva</h1>
+  <p class="sub">Simulación del firmware CoffeeScale (mismos modos, temporizador y lógica). Es una maqueta: el aspecto es orientativo y no hay hardware real.</p>
+
+  <div class="grid">
+    <!-- Dispositivo -->
+    <div class="device" id="device">
+      <div class="usb"></div>
+      <div class="plate">
+        <svg viewBox="0 0 320 344" preserveAspectRatio="none" aria-hidden="true">
+          <g stroke="#d62d2d" stroke-width="13" stroke-linecap="round" id="ribs"></g>
+        </svg>
+        <div class="cup" id="cup"><div class="coffee" id="cupCoffee"></div></div>
+      </div>
+      <div class="strip">
+        <button class="knob" id="knob" aria-label="Pomo (girar con ◀ ▶, pulsar)"><span class="mark" id="knobMark"></span></button>
+        <div class="screenwrap"><canvas id="small" width="320" height="172"></canvas></div>
+        <button class="bbtn" id="bbtn" aria-label="Botón azul"></button>
+      </div>
+    </div>
+
+    <!-- Controles -->
+    <div class="panel">
+      <div class="card">
+        <h2>Pantalla ampliada</h2>
+        <div class="lupa"><canvas id="big" width="640" height="344"></canvas></div>
+      </div>
+
+      <div class="card">
+        <h2>Controles del aparato</h2>
+        <div class="row">
+          <button class="t" id="bLeft">◀ Girar pomo</button>
+          <button class="t" id="bRight">Girar pomo ▶</button>
+          <button class="t" id="bPress">Pulsar pomo (tara)</button>
+          <button class="t" id="bBlue">Botón azul</button>
+          <button class="t" id="bBlueLong">Azul largo (ajustes)</button>
+        </div>
+        <p class="note">Teclado: <kbd>←</kbd> <kbd>→</kbd> giran el pomo, <kbd>Intro</kbd> lo pulsa, <kbd>Espacio</kbd> es el botón azul, <kbd>M</kbd> es pulsación larga. En un móvil, usa los botones.</p>
+      </div>
+
+      <div class="card">
+        <h2>Simular una preparación</h2>
+        <ol class="steps">
+          <li>Elige el modo girando el pomo.</li>
+          <li>Pon la taza en la plataforma y pulsa el pomo (tara).</li>
+          <li>Pulsa “Simular”: el café cae y el reloj arranca solo al primer goteo.</li>
+        </ol>
+        <div class="row" style="margin-top:10px">
+          <button class="t" id="bCup">Poner / quitar taza</button>
+          <button class="t" id="bSim">Simular preparación</button>
+          <button class="t pri" id="bAuto">▶ Demo automática</button>
+          <span class="speed" id="speed"><button data-s="1" class="on">×1</button><button data-s="3">×3</button><button data-s="8">×8</button></span>
+        </div>
+        <p class="note" id="status">Taza en la plataforma: no.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ---------- Datos (iguales al firmware) ----------
+const MODES = [
+  {name:"Espresso",        dose:18, ratio:2.0,  tMin:25,  tMax:32,  autoStart:true,  autoStop:true,  kind:"shot"},
+  {name:"Ristretto",       dose:18, ratio:1.5,  tMin:20,  tMax:28,  autoStart:true,  autoStop:true,  kind:"shot"},
+  {name:"Lungo",           dose:18, ratio:3.0,  tMin:30,  tMax:45,  autoStart:true,  autoStop:true,  kind:"shot"},
+  {name:"V60",             dose:15, ratio:16,   tMin:150, tMax:210, autoStart:true,  autoStop:false, kind:"pour"},
+  {name:"Aeropress",       dose:15, ratio:13,   tMin:90,  tMax:120, autoStart:true,  autoStop:false, kind:"pour"},
+  {name:"Prensa francesa", dose:30, ratio:15,   tMin:230, tMax:250, autoStart:true,  autoStop:false, kind:"pour"},
+  {name:"Libre",           dose:0,  ratio:0,    tMin:0,   tMax:0,   autoStart:false, autoStop:false, kind:"pour"},
+];
+const cfg = MODES.map(m => ({...m}));
+const C = {BLACK:"#000", WHITE:"#fff", GREY:"#7b7d7b", DARK:"#202420", YELLOW:"#f5d400", GREEN:"#22dd00",
+           RED:"#f00000", COFFEE:"#5a3a18", COFFEE_OVER:"#8a2828", CREMA:"#cc8c44"};
+
+// ---------- Estado "firmware" ----------
+let simNow = 0, speed = 1;
+let state = "READY";            // READY, BREW, DONE, MENU, EDIT, CAL
+let mode = 0, armed = false, rising = false, riseAt = 0;
+let startMs = 0, endMs = 0, lastFlowMs = 0, finalWeight = 0;
+let tareG = 0, wf = 0, shown = 0, flow = 0, haveW = false;
+let hist = [], toast = "", toastUntil = 0;
+let menuRow = 0, draft = 0;
+const MENU_ROWS = 7;
+
+// ---------- Simulación física ----------
+let cupOn = false, cupMass = 185, liquid = 0;
+let scenario = null;            // {kind, t0, ...}
+let sensorRaw = 0;
+const trueWeight = () => cupOn ? cupMass + liquid : 0;
+
+const targetG = () => cfg[mode].dose * cfg[mode].ratio;
+
+function startScenario() {
+  if (!cupOn) { setStatus("Primero pon la taza."); return; }
+  if (scenario) return;
+  liquid = 0;
+  const m = cfg[mode], tg = targetG();
+  if (m.kind === "shot") {
+    const mid = (m.tMin + m.tMax) / 2;
+    const base = tg / Math.max(mid - 3, 5);
+    scenario = {kind:"shot", t0: simNow + 4500, base, target: tg, done:false};
+  } else {
+    const total = tg > 0 ? tg : 100, tm = (m.tMax || 40);
+    const fr = tg > 0 ? [0.19, 0.42, 0.39] : [1], st = tg > 0 ? [0.02, 0.25, 0.5] : [0.05], du = tg > 0 ? [8, 20, 20] : [10];
+    scenario = {kind:"pour", pours: fr.map((f,i)=>({s: simNow + 3000 + st[i]*tm*1000, d: du[i]*1000, g: total*f})), done:false};
+  }
+  setStatus("Preparando… (el reloj arranca solo si hiciste la tara).");
+}
+function stepScenario(dt) {
+  if (!scenario) return;
+  if (scenario.kind === "shot") {
+    const t = (simNow - scenario.t0) / 1000;
+    if (t < 0) return;
+    let f = scenario.base * (1 - Math.exp(-t / 3)) * 1.12;
+    const left = scenario.target - liquid;
+    f *= Math.min(1, Math.max(0.12, left / 3));
+    if (left <= 0.3) { scenario = null; setStatus("Extracción terminada."); return; }
+    liquid += f * dt / 1000;
+  } else {
+    let active = false, remaining = false;
+    for (const p of scenario.pours) {
+      if (simNow >= p.s && simNow < p.s + p.d) { liquid += p.g * dt / p.d; active = true; }
+      if (simNow < p.s + p.d) remaining = true;
+    }
+    if (!remaining) { scenario = null; setStatus("Vertido terminado. Para el reloj con el botón azul."); }
+  }
+}
+
+// ---------- Lógica del firmware ----------
+function updateWeight(dt) {
+  const noise = (Math.random() - .5) * 0.18;
+  sensorRaw += 0.35 * ((trueWeight() + noise) - sensorRaw);         // filtro EMA de la lectura
+  wf = sensorRaw - tareG;
+  if (Math.abs(wf - shown) >= 0.15) shown = wf;
+  // historial ~10 Hz para el caudal
+  if (simNow - (hist.length ? hist[hist.length-1].t : -1e9) >= 100) {
+    hist.push({t: simNow, w: wf});
+    if (hist.length > 10) hist.shift();
+    if (hist.length >= 4) {
+      const a = hist[0], b = hist[hist.length-1], d = (b.t - a.t) / 1000;
+      const f = d > 0.3 ? (b.w - a.w) / d : 0;
+      flow += 0.3 * (f - flow);
+    }
+  }
+}
+function showToast(s, ms=2000) { toast = s; toastUntil = simNow + ms; }
+function doTare() {
+  tareG = sensorRaw; shown = wf = 0; hist = []; flow = 0; armed = true; rising = false;
+  showToast("Tara", 900);
+}
+function startBrew(at) { state = "BREW"; startMs = at; lastFlowMs = simNow; armed = false; rising = false; }
+function stopBrew(end) { endMs = end; finalWeight = shown; state = "DONE"; }
+function resetToReady() { state = "READY"; armed = false; rising = false; }
+function changeMode(steps) { mode = ((mode + steps) % MODES.length + MODES.length) % MODES.length; }
+function brewLogic() {
+  const c = cfg[mode];
+  if (state === "READY" && c.autoStart && armed) {
+    if (shown >= 0.6) {
+      if (!rising) { rising = true; riseAt = simNow; }
+      if (shown >= 1.0 && simNow - riseAt >= 150) startBrew(riseAt);
+    } else rising = false;
+  } else if (state === "BREW") {
+    if (flow >= 0.4) lastFlowMs = simNow;
+    if (c.autoStop && shown >= 5 && simNow - lastFlowMs >= 4000) stopBrew(lastFlowMs);
+  }
+}
+
+// Entradas
+function rotate(steps) {
+  knobAngle += steps * 30; document.getElementById("knob").style.transform = `rotate(${knobAngle}deg)`;
+  if (state === "READY") changeMode(steps);
+  else if (state === "MENU") menuRow = Math.min(MENU_ROWS-1, Math.max(0, menuRow + (steps>0?1:-1)));
+  else if (state === "EDIT") {
+    if (menuRow === 0) draft = clamp(draft + 0.5*steps, 0, 100);
+    else if (menuRow === 1) draft = clamp(draft + 0.1*steps, 0, 30);
+    else draft = clamp(draft + steps, 0, 900);
+  }
+}
+let knobAngle = 0;
+const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+function pressKnob() {
+  const c = cfg[mode];
+  if (state === "READY" || state === "BREW") doTare();
+  else if (state === "DONE") { doTare(); resetToReady(); }
+  else if (state === "MENU") {
+    if (menuRow === 0) { draft = c.dose; state = "EDIT"; }
+    else if (menuRow === 1) { draft = c.ratio; state = "EDIT"; }
+    else if (menuRow === 2) { draft = c.tMin; state = "EDIT"; }
+    else if (menuRow === 3) { draft = c.tMax; state = "EDIT"; }
+    else if (menuRow === 4) c.autoStart = !c.autoStart;
+    else if (menuRow === 5) { showToast("Calibración: solo en el aparato real", 2500); }
+    else resetToReady();
+  } else if (state === "EDIT") {
+    if (menuRow === 0) c.dose = draft; else if (menuRow === 1) c.ratio = draft;
+    else if (menuRow === 2) c.tMin = Math.round(draft); else if (menuRow === 3) c.tMax = Math.round(draft);
+    if (c.tMax < c.tMin) c.tMax = c.tMin;
+    state = "MENU";
+  }
+}
+function blueShort() {
+  if (state === "READY") startBrew(simNow);
+  else if (state === "BREW") stopBrew(simNow);
+  else if (state === "DONE") resetToReady();
+  else if (state === "MENU") resetToReady();
+  else if (state === "EDIT") state = "MENU";
+}
+function blueLong() {
+  if (state === "READY" || state === "DONE") { state = "MENU"; menuRow = 0; }
+  else if (state === "MENU" || state === "EDIT") resetToReady();
+}
+
+// ---------- Dibujo ----------
+const off = document.createElement("canvas"); off.width = 320; off.height = 172;
+const g = off.getContext("2d");
+const FONT_BIG = '"Jersey 10", "Courier New", monospace';
+const FONT = 'system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+
+function fmtT(s) { return s < 100 ? s + "s" : Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); }
+function text(s, x, y, size, color, align="left", weight="bold", font=FONT) {
+  g.font = `${weight} ${size}px ${font}`; g.fillStyle = color; g.textAlign = align; g.textBaseline = "top"; g.fillText(s, x, y);
+}
+function wave(x, t) { return Math.sin(2*Math.PI*(x/168 - (t % 1500)/1500)); }
+function drawLiquid(now, frac, color) {
+  if (frac <= 0.005) return;
+  const top = 30, bottom = 172, f = Math.min(frac, 1), surface = bottom - (bottom-top)*f;
+  const amp = Math.min(5, Math.min(surface - top, bottom - surface) / 3);
+  g.fillStyle = color;
+  for (let x = 0; x < 320; x++) {
+    const y = Math.min(bottom-1, Math.max(top, Math.round(surface + amp*wave(x, now))));
+    g.fillStyle = color; g.fillRect(x, y, 1, bottom - y);
+    g.fillStyle = C.CREMA; g.fillRect(x, y, 1, 1);
+  }
+}
+function drawWeight(v, x, y, col) {
+  const t = Math.round(Math.abs(v) * 10), ip = ((v < 0 && t > 0) ? "-" : "") + Math.floor(t/10);
+  g.font = `bold 22px ${FONT}`; const w = g.measureText(ip).width;
+  text(ip, x, y, 22, col);
+  g.fillStyle = col; g.beginPath(); g.arc(x + w + 4, y + 20, 2, 0, 7); g.fill();
+  text(String(t % 10), x + w + 10, y, 22, col);
+  const w2 = g.measureText(String(t % 10)).width;
+  text("g", x + w + 12 + w2, y + 6, 15, C.GREY);
+}
+function drawMain(now) {
+  const c = cfg[mode], target = targetG(), frac = target > 0 ? shown / target : 0;
+  drawLiquid(now, frac, frac > 1.02 ? C.COFFEE_OVER : C.COFFEE);
+  text(c.name, 8, 3, 15, C.YELLOW);
+  if (target > 0) text(`${c.dose.toFixed(0)}g > ${target.toFixed(0)}g  ${fmtT(c.tMin)}-${fmtT(c.tMax)}`, 312, 5, 12, C.WHITE, "right", "normal");
+  const ms = state === "BREW" ? now - startMs : state === "DONE" ? endMs - startMs : 0;
+  const sec = Math.floor(ms/1000), tenth = Math.floor(ms/100) % 10;
+  let tcol = C.WHITE;
+  if (target > 0 && (state === "BREW" || state === "DONE")) { if (sec > c.tMax) tcol = C.RED; else if (sec >= c.tMin) tcol = C.GREEN; }
+  const tb = String(Math.floor(sec/60)).padStart(2,"0") + ":" + String(sec%60).padStart(2,"0");
+  g.font = `110px ${FONT_BIG}`; const tw = g.measureText(tb).width, x0 = (320 - (tw + 26)) / 2;
+  text(tb, x0, 8, 110, tcol, "left", "normal", FONT_BIG);
+  g.fillStyle = tcol; g.beginPath(); g.arc(x0 + tw + 6, 92, 3, 0, 7); g.fill();
+  text(String(tenth), x0 + tw + 12, 70, 22, tcol);
+  drawWeight(shown, 10, 126, C.WHITE);
+  if (state === "BREW" || state === "DONE") text(Math.max(flow,0).toFixed(1) + " g/s", 312, 132, 15, C.WHITE, "right");
+  let hint;
+  if (now < toastUntil) hint = toast;
+  else if (state === "READY") hint = (armed && c.autoStart) ? "Listo: arranca solo al caer cafe" : "Pulsa pomo: tara   Azul: inicio";
+  else if (state === "BREW") hint = "Azul: parar   Pomo: tara";
+  else {
+    const ratio = c.dose > 0 ? finalWeight / c.dose : 0;
+    const v = target <= 0 ? "" : sec < c.tMin ? "  rapido" : sec > c.tMax ? "  lento" : "  en tiempo";
+    hint = `${finalWeight.toFixed(1)}g  Ratio 1:${ratio.toFixed(1)}${v}`;
+  }
+  text(hint, 160, 154, 12, C.WHITE, "center", "normal");
+}
+function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Auto inicio","Calibrar","Volver"][r]; }
+function menuValue(r) {
+  const c = cfg[mode], ed = state === "EDIT" && r === menuRow;
+  switch (r) {
+    case 0: return (ed ? draft : c.dose).toFixed(1) + " g";
+    case 1: return "1:" + (ed ? draft : c.ratio).toFixed(1);
+    case 2: return fmtT(ed ? Math.round(draft) : c.tMin);
+    case 3: return fmtT(ed ? Math.round(draft) : c.tMax);
+    case 4: return c.autoStart ? "SI" : "NO";
+    default: return "";
+  }
+}
+function drawMenu() {
+  text("Ajustes: " + cfg[mode].name, 8, 3, 15, C.YELLOW);
+  const visible = 5, pitch = 26, y0 = 30, first = clamp(menuRow - 2, 0, MENU_ROWS - visible);
+  for (let i = 0; i < visible; i++) {
+    const r = first + i, y = y0 + i*pitch, sel = r === menuRow;
+    if (sel) { g.fillStyle = state === "EDIT" ? C.COFFEE : C.GREY; g.beginPath(); g.roundRect(4, y-2, 312, pitch-2, 5); g.fill(); }
+    text(menuLabel(r), 12, y+2, 15, sel ? "#000" : "#fff");
+    text(menuValue(r), 306, y+2, 15, (state === "EDIT" && sel) ? "#fff" : (sel ? "#000" : "#fff"), "right");
+  }
+  if (simNow < toastUntil) text(toast, 160, 158, 12, C.WHITE, "center", "normal");
+}
+function draw() {
+  g.fillStyle = C.BLACK; g.fillRect(0, 0, 320, 172);
+  if (state === "MENU" || state === "EDIT") drawMenu(); else drawMain(simNow);
+  for (const id of ["small","big"]) {
+    const cv = document.getElementById(id), cx = cv.getContext("2d");
+    cx.imageSmoothingEnabled = true; cx.drawImage(off, 0, 0, cv.width, cv.height);
+  }
+  // taza en la plataforma
+  const cup = document.getElementById("cup"), cof = document.getElementById("cupCoffee");
+  cup.classList.toggle("on", cupOn);
+  cof.style.opacity = cupOn ? Math.min(1, liquid / 8) : 0;
+  cof.style.inset = (14 + Math.max(0, 34 - liquid*0.9)) + "px";
+}
+
+// ---------- Bucle ----------
+let last = performance.now();
+function loop(ts) {
+  const real = Math.min(100, ts - last); last = ts;
+  const steps = Math.max(1, Math.round(speed));       // sub-pasos para mantener la lógica estable
+  const dt = real * speed / steps;
+  for (let i = 0; i < steps; i++) { simNow += dt; stepScenario(dt); updateWeight(dt); brewLogic(); autoStep(); }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Demo automática ----------
+let auto = null;
+function autoStep() {
+  if (!auto) return;
+  if (auto.phase === 0) { mode = auto.mode ?? mode; cupOn = true; liquid = 0; resetToReady(); auto.t = simNow; auto.phase = 1; setStatus("Demo: taza puesta…"); }
+  else if (auto.phase === 1 && simNow - auto.t > 1500) { doTare(); auto.t = simNow; auto.phase = 2; setStatus("Demo: tara hecha, el reloj arrancará solo."); }
+  else if (auto.phase === 2 && simNow - auto.t > 1200) { startScenario(); auto.phase = 3; }
+  else if (auto.phase === 3 && !scenario) {
+    // En espresso la parada es automática; en el resto pulsamos azul tras un momento.
+    if (state === "BREW" && !cfg[mode].autoStop) { auto.t = simNow; auto.phase = 4; }
+    else if (state === "DONE") { auto = null; setStatus("Demo terminada: mira el resumen en pantalla."); }
+  }
+  else if (auto.phase === 4 && simNow - auto.t > 4000) { blueShort(); auto = null; setStatus("Demo terminada: mira el resumen en pantalla."); }
+}
+function setStatus(s) { document.getElementById("status").textContent = s + "  |  Taza en la plataforma: " + (cupOn ? "sí" : "no") + "."; }
+
+// ---------- Eventos ----------
+function bindHold(el, shortFn, longFn) {
+  let timer = null, long = false;
+  el.addEventListener("pointerdown", () => { long = false; timer = setTimeout(() => { long = true; longFn(); }, 800); });
+  const up = () => { clearTimeout(timer); if (timer !== null && !long) shortFn(); timer = null; };
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointerleave", () => { clearTimeout(timer); timer = null; });
+}
+document.getElementById("knob").addEventListener("click", pressKnob);
+document.getElementById("knob").addEventListener("wheel", e => { e.preventDefault(); rotate(e.deltaY > 0 ? 1 : -1); }, {passive:false});
+bindHold(document.getElementById("bbtn"), blueShort, blueLong);
+document.getElementById("bLeft").onclick = () => rotate(-1);
+document.getElementById("bRight").onclick = () => rotate(1);
+document.getElementById("bPress").onclick = pressKnob;
+document.getElementById("bBlue").onclick = blueShort;
+document.getElementById("bBlueLong").onclick = blueLong;
+document.getElementById("bCup").onclick = () => { cupOn = !cupOn; if (!cupOn) { liquid = 0; scenario = null; } setStatus(cupOn ? "Taza colocada." : "Taza retirada."); };
+document.getElementById("bSim").onclick = startScenario;
+document.getElementById("bAuto").onclick = () => { scenario = null; auto = {phase: 0}; };
+document.getElementById("speed").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  speed = +b.dataset.s; for (const x of document.querySelectorAll("#speed button")) x.classList.toggle("on", x === b);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft") rotate(-1); else if (e.key === "ArrowRight") rotate(1);
+  else if (e.key === "Enter") pressKnob(); else if (e.key === " ") { e.preventDefault(); blueShort(); }
+  else if (e.key === "m" || e.key === "M") blueLong();
+});
+
+// Nervios diagonales (decoración del dispositivo)
+(function ribs() {
+  const g = document.getElementById("ribs"); let html = "";
+  for (let i = -6; i <= 6; i++) {
+    const off = i * 56, len = 360 - Math.abs(i) * 36; if (len < 20) continue;
+    const cx = 160 + off * 0.0, cy = 172 + 0;
+    // línea diagonal a 45° desplazada perpendicularmente
+    const px = 160 + off * 0.7071, py = 172 + off * 0.7071;
+    const dx = 0.7071 * len / 2, dy = -0.7071 * len / 2;
+    html += `<line x1="${px - dx}" y1="${py - dy}" x2="${px + dx}" y2="${py + dy}"/>`;
+  }
+  g.innerHTML = html;
+})();
+
+setStatus("Listo.");
+(document.fonts && document.fonts.load ? document.fonts.load('110px "Jersey 10"') : Promise.resolve()).catch(()=>{}).finally(() => requestAnimationFrame(loop));
+</script>
+</body>
+</html>
