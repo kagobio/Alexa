@@ -8,7 +8,7 @@ de Aaron Broom (hardware, guía de montaje) y [todayicreated/water-tracker](http
 | `bascula.scad`, `preview.png` | Boceto v1 (varias celdas, pantalla redonda). Descartado. |
 | `bascula_v2.scad`, `preview_v2.png` | Boceto v2: distribución del Water Tracker. |
 | `img/` (conjunto, despiezado, interior y piezas de la v3), `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
-| `bascula_v3.scad` | **Actual**: montaje con una celda de barra (extremo fijo a la base, extremo libre a la plataforma). 152 × 188 mm, plataforma útil ~142 × 142 mm, para el Hario V60 Termo 800 ml. |
+| `bascula_v3.scad` | **Actual (v3.1)**: montaje con una celda de barra (extremo fijo a la base, extremo libre a la plataforma). 152 × 188 mm, plataforma útil ~142 × 142 mm, para el Hario V60 Termo 800 ml. |
 | `firmware/CoffeeScale/` | Firmware con temporizador y modos de café. Ver su README. |
 
 > `bascula_v3.scad` **sí compila** (OpenSCAD 2021.01) y pasa comprobaciones de choques entre piezas, pero no se ha impreso ni probado con piezas reales. El firmware **no se ha compilado ni probado**.
@@ -49,10 +49,24 @@ entera. Con el servidor lleno (~0,8 kg de café + ~0,7 kg de servidor + dripper)
   (la plataforma es `W - 9.8` y `D - 45.8`); comprueba que la celda sigue cabiendo si cambias `cell_angle`.
 - Corrección: en la v3 anterior (120 × 170 mm, celda a 25°) el extremo fijo de la celda quedaba fuera de la carcasa. Con estos valores cabe.
 
-## Comprobaciones hechas con OpenSCAD (v3)
-- Las 8 piezas compilan sin errores ni avisos y son sólidos válidos.
-- Sin choques entre celda, plataforma, carcasa, base y panel.
-- Corregido: los postes de los tornillos BT2.6 chocaban con la plataforma, algunos no tocaban la pared (quedaban flotando) y los de las esquinas sobresalían de la carcasa. Ahora son 8 mm de diámetro, 16 mm de alto y están pegados a la pared.
-- Medidas: carcasa 152 × 188 × 26 mm; base 7 mm; plataforma 142,2 × 142,2 × 3 mm.
-- **No comprobado:** ajuste con la pantalla, el encoder y el ESP32 reales (el modelo no incluye sus huecos de montaje), tolerancias de tu impresora y los taladros de tu celda.
-- Los STL de `nervios` y `tapa` conservan su altura de montaje (no empiezan en z=0): el laminador los apoya en la cama solo.
+## v3.1: cambios respecto a la primera v3
+1. **Plataforma rígida:** placa maciza de **6 mm** (antes 3 mm) con costillas de 2 mm por debajo y un borde de 2 mm contra salpicaduras. Con 3 mm la flexión en el extremo era de unos 2 mm con 2 kg; con 6 mm baja a unas décimas (cálculo orientativo de viga en voladizo, sin ensayo).
+2. **Separador** de 3 mm impreso (`separador`) entre la celda y la plataforma. Antes solo existía el hueco.
+3. **Dos tornillos M4** en el extremo libre de la celda (antes uno), con rebaje para la cabeza fina. M4×12 da ~5 mm de rosca en la celda.
+5. **Patas de 3 mm** bajo la base y rebaje de 1,5 mm para las cabezas de los M5 (antes la báscula se habría balanceado).
+6. **Tapa sujeta con 4 pivotes a presión** (con hendidura en cruz) en agujeros ciegos de la plataforma. Se imprime boca abajo, con los pivotes hacia arriba. Los nervios rojos se imprimen en un segundo color sobre la tapa o se pegan.
+7. **Datos estimados agrupados** al principio de `bascula_v3.scad` ("DATOS A VERIFICAR") y pieza `test_ajuste` (abajo). No se pueden "corregir" sin medir tus piezas.
+
+La altura de la carcasa ahora se calcula (27,2 mm) para que la tapa quede a ras del borde.
+
+## Antes de imprimir todo: `test_ajuste`
+`pieza = "test_ajuste"` (o `stl/test_ajuste.stl`) es una placa pequeña (~143 × 74 mm, 3 mm) de unos 15–20 min de impresión:
+- **Placa de controles:** ventana de pantalla (36 × 19 mm), agujero del encoder (7,5 mm) y hueco del interruptor MX (14 × 14 mm). Comprueba que tus piezas entran.
+- **Plantilla de la celda:** apoya tu celda en el alojamiento y comprueba que los taladros M5 (a 6 y 21 mm) y M4 (a 5 y 15 mm del extremo) coinciden. Si no, cambia `fix_holes`, `free_holes` y las medidas de la celda en el `.scad`.
+
+## Comprobaciones hechas con OpenSCAD 2021.01 (v3.1)
+- Las 9 piezas compilan sin errores ni avisos y son sólidos válidos.
+- Sin choques entre celda, base, carcasa, separador, plataforma, tapa, nervios y panel. Los 4 pivotes de la tapa solapan con los agujeros a propósito (ajuste a presión).
+- La celda cabe dentro de la carcasa a 45°.
+- Medidas: carcasa 152 × 188 × 27,2 mm; base 7 mm (+3 mm de patas); plataforma 142,2 × 142,2 mm.
+- **No comprobado:** impresión real, el ajuste a presión de los pivotes (depende de tu impresora), la rigidez real de la plataforma, y el ajuste con pantalla, encoder, ESP32 y celda reales (el modelo no incluye soportes para el ESP32, el HX711 ni la pantalla).
