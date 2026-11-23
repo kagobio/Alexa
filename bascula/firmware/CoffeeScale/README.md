@@ -64,9 +64,7 @@ Dosis, ratio y ventana de tiempo se editan por modo en **Ajustes** y se guardan 
 - **Pomo** durante la extracción: re-tara sin parar el reloj (útil en pour-over).
 - **Botón azul largo** (en espera o al terminar): menú de Ajustes
   (dosis, ratio, tiempo mín/máx, parar, auto inicio, avisos al móvil, Wi-Fi, código, calibrar).
-- Pantalla: tiempo grande (verde dentro de la ventana, rojo si se pasa), peso, caudal en g/s
-  y un fondo de café que sube con una onda hasta el peso objetivo. Al terminar muestra el
-  ratio real y si fue rápido, en tiempo o lento.
+
 
 ## Calibración
 Ajustes → Calibrar: quita todo, pulsa el pomo; gira para indicar el peso conocido y pulsa;
@@ -92,3 +90,24 @@ Notas:
   y comprueba que el peso no oscila al enviar. Si molesta, se puede conectar solo en el momento de enviar.
 - Si no hay Wi-Fi en ese momento, el aviso se descarta (no se reintenta).
 - Está **sin compilar ni probar en hardware**.
+
+## Pantalla (v2: la misma que la demo)
+Fondo negro, tiempo grande y peso. Un **nivel de café** sube con una onda suave hasta el peso objetivo (dosis × ratio) y pocas burbujas
+mientras fluye. Verde dentro de la ventana de tiempo, rojo si se pasa. Detalles:
+- el reloj da un pequeño salto cada segundo; al cambiar de modo el nombre se desliza con un fundido;
+- al hacer la **tara**, un aro azul rodea el peso;
+- al llegar al **objetivo** en filtro: aro verde y la derecha pasa a decir "objetivo" (el reloj sigue);
+- al parar el reloj: aro verde si estás en tiempo, naranja si no; el nivel pasa a verde y a la derecha sale el ratio;
+- puntito arriba: verde = tara hecha, arranca solo; hueco = falta la tara; texto rojo si no está calibrada.
+- **Atenuación:** tras 2 minutos sin tocar nada ni cambiar el peso en espera, la luz baja (PWM, 40/255) y casi no redibuja; cualquier giro, pulsación o cambio de peso de 1 g la despierta. Nunca se atenúa mientras prepara café, tras terminar ni en los menús.
+
+## Prueba en el servidor (sin placa)
+`firmware/test_host/run.sh` compila **el firmware real** contra piezas falsas de Arduino (pantalla, HX711, Wi-Fi, memoria, colas) y lo ejecuta
+con un café simulado. Comprueba (32 comprobaciones, hoy 0 fallos, también con AddressSanitizer/UBSan):
+- tara y arranque automático; espresso parado al peso (22 s, 35,9 g, ratio 1:2,0, un aviso al móvil);
+- V60: al llegar a 240 g el reloj **sigue**, avisa "objetivo alcanzado" y solo se para con el botón azul;
+- modo "sin goteo": para solo a los 8 s sin caudal tras el objetivo;
+- menú (el ajuste "Parar" cambia y se guarda), aviso de "Sin calibrar", atenuación y despertar, nombre del modo al girar el pomo.
+
+Esto **valida la lógica, no el hardware**: no prueba el HX711, el ST7789, el Wi-Fi ni la velocidad real del ESP32, y no comprueba que las librerías reales de Arduino compilen
+(las piezas falsas son más permisivas). Sigue pendiente compilarlo con el Arduino IDE y probarlo en la placa. El `.ino` usa `ledcAttach`/`ledcWrite` (core ESP32 3.x).

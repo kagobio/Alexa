@@ -68,10 +68,11 @@ disp_post_len = tray_h - ear_t;
 pomo_d = 26; pomo_h = 14;       // pomo con estrías y concavidad superior
 shaft_d = 6; shaft_flat = 4.6;  // eje del encoder KY-040 (en D): ESTIMADO, mide el tuyo
 boton_d = 18; boton_h = 7;      // tecla redondeada 18 x 18 mm: cubre las esquinas del hueco MX de 14 x 14
-nervio_w = 8; nervio_h = 2; paso = 19;
+nervio_w = 8; nervio_h = 1.6; paso = 16.5;
 post_d = 8; post_h = 16;
-enc_x = -(W/2 - pared - pomo_d/2 - 6);   // posición X del encoder
-btn_x =  (W/2 - pared - boton_d/2 - 8);  // posición X del botón
+panel_w = W - 12; panel_h = 32;         // panel negro en cápsula: marco blanco de 6 mm alrededor
+enc_x = -(panel_w/2 - panel_h/2);        // el pomo queda concéntrico con el extremo izquierdo de la cápsula
+btn_x =  (panel_w/2 - panel_h/2);        // y el botón con el derecho
 
 module rrect(w,d,h,r){ linear_extrude(h) offset(r) square([w-2*r,d-2*r],center=true); }
 // caja redondeada con el canto SUPERIOR suavizado (radio f)
@@ -137,7 +138,7 @@ module carcasa_raw() {   // marco con cubierta en el frente (panel de control); 
         rrect(W,D,H,R);
         translate([0,0,-1]) rrect(W-2*pared,D-2*pared,H-deck+1,R-pared);        // cavidad
         translate([0,cy,H-deck-1]) rrect(plat_w+2*gap,plat_d+2*gap,deck+2,10);  // ventana plataforma
-        translate([0,-D/2+panel_d/2+pared,H-2]) rrect(W-2*pared-1,panel_d,3,R-pared);  // bolsillo del panel
+        translate([0,yc,H-2]) rrect(panel_w+0.6,panel_h+0.6,3,(panel_h+0.6)/2-0.01);          // bolsillo del panel (cápsula)
         translate([esp_x,D/2,esp_usb_z]) cube([usb_w,2*pared+2,usb_h],center=true);   // USB-C del ESP32 (trasero)
         // huecos que atraviesan la cubierta bajo el panel: pantalla, encoder y interruptor
         translate([0,yc,H-4]) rrect(disp_w,disp_h,5,1.5);
@@ -155,7 +156,7 @@ module carcasa_raw() {   // marco con cubierta en el frente (panel de control); 
 
 module panel() {     // inserto negro del frente
   translate([0,yc,H-2]) difference() {
-    rrect(W-2*pared-1.4,panel_d-0.4,2,R-pared);
+    rrect(panel_w,panel_h,2,panel_h/2-0.01);
     // ventana de la pantalla: esquinas redondeadas y bisel de 0,6 mm hacia arriba
     hull() { translate([0,0,-0.5]) rrect(disp_w,disp_h,0.01,1.5); translate([0,0,2]) rrect(disp_w+1.2,disp_h+1.2,0.01,2.1); }
     translate([0,0,-0.5]) rrect(disp_w,disp_h,3,1.5);
@@ -231,11 +232,20 @@ module tapa() {     // se imprime boca abajo (cara superior en la cama), con los
     for (p=peg_pts()) translate([p[0],p[1],0.01]) mirror([0,0,1]) peg();
   }
 }
-module nervios() {   // nervios diagonales rojos sobre la tapa (segundo color o pegados)
-  intersection() {
-    translate([0,0,plat_t+tapa_t-0.02]) rrect(plat_w-2*lip_w-8,plat_d-2*lip_w-8,nervio_h+0.02,8);
-    for (i=[-8:8]) translate([0,0,plat_t+tapa_t-0.02]) rotate(-45) translate([i*paso,0,0])
-      linear_extrude(nervio_h+0.02) offset(nervio_w/2) square([0.01,220-abs(i)*12],center=true);
+module cap2d(p1,p2,w) { hull() { translate(p1) circle(d=w,$fn=32); translate(p2) circle(d=w,$fn=32); } }
+module nervios() {   // nervios diagonales rojos: cápsulas de punta redondeada y cantos suavizados (sobre la tapa)
+  k = 0.70710678;
+  h = (plat_w - 2*lip_w - 0.6)/2 - 6 - nervio_w/2;     // los centros de las puntas quedan a 6 mm del borde de la tapa
+  translate([0,0,plat_t+tapa_t-0.02]) for (i=[-7:7]) {
+    cx = i*paso*k; cyy = -cx;
+    t0 = max(-h-cx, -h-cyy)/k; t1 = min(h-cx, h-cyy)/k;
+    if (t1 - t0 >= 0.5) {
+      p1 = [cx + t0*k, cyy + t0*k]; p2 = [cx + t1*k, cyy + t1*k];
+      hull() {
+        linear_extrude(0.02) cap2d(p1,p2,nervio_w);
+        translate([0,0,nervio_h+0.02-0.01]) linear_extrude(0.01) cap2d(p1,p2,nervio_w-1.6);   // arista superior achaflanada
+      }
+    }
   }
 }
 module pomo() {   // pomo con estrías, canto redondeado, concavidad superior, hueco para la tuerca y eje en D

@@ -31,7 +31,10 @@ constexpr int HX_RATE = 4;   // Opcional: pin RATE del HX711 (80 SPS). Ver READM
 // ---------- Colores RGB565 ----------
 constexpr uint16_t BLACK = 0x0000, WHITE = 0xFFFF, GREY = 0x7BEF, DARKGREY = 0x2104,
                    YELLOW = 0xFEA0, GREEN = 0x2EE0, RED = 0xF800,
-                   COFFEE = 0x59C3, COFFEE_OVER = 0x8945, CREMA = 0xCC68;
+                   COFFEE = 0x59C3, COFFEE_OVER = 0x8945, CREMA = 0xCC68,
+                   LEVEL = 0x28C1, LEVEL_OK = 0x1183, LEVEL_OVER = 0x38A2,   // fondo del nivel de cafe: normal / en tiempo / pasado
+                   CREMA_OK = 0x3E8D, CREMA_OVER = 0xDAA9,
+                   TXT_MODE = 0xCE79, TXT_DIM = 0x8C51, TXT_DIMMER = 0x5ACB, TXT_RIGHT = 0xD69A, BUBBLE = 0x5AA9;
 
 // ---------- Modos de preparacion ----------
 struct ModeDef {
@@ -123,7 +126,10 @@ uint32_t lastReadMs = 0;
 enum State { READY, BREW, DONE, MENU, EDIT, CAL_EMPTY, CAL_MASS, CAL_LOAD };
 State state = READY;
 bool dirty = true, armed = false, busy = false;
-bool targetCue = false;
+bool targetCue = false, doneInWindow = false;
+uint32_t modeChangedMs = 0, tareMs = 0, doneMs = 0, targetCueMs = 0, secMs = 0, lastActivityMs = 0;
+int lastSecShown = -1; float fracShown = 0;
+bool dimmed = false;
 uint32_t startMs = 0, endMs = 0, lastFlowMs = 0, riseAt = 0, reachedAt = 0, lastDraw = 0, toastUntil = 0;
 bool rising = false;
 float finalWeight = 0;
@@ -140,6 +146,12 @@ void saveCfg() {
   if (prefs.putBytes("cfg", &saved, sizeof(saved)) != sizeof(saved))
     Serial.println("ERROR: no se pudo guardar la configuracion");
 }
+// Retroiluminacion por PWM (core ESP32 3.x: ledcAttach/ledcWrite). Se atenua tras un rato sin uso y vuelve con cualquier actividad.
+constexpr uint32_t DIM_AFTER_MS = 120000;
+constexpr uint8_t BL_FULL = 255, BL_DIM = 40;
+float lastActW = 0;
+void setBacklight(uint8_t duty) { ledcWrite(TFT_BL, duty); }
+void activity(uint32_t now) { lastActivityMs = now; if (dimmed) { dimmed = false; setBacklight(BL_FULL); } }
 void showToast(const String &s, uint32_t ms = 2000) { toast = s; toastUntil = millis() + ms; dirty = true; }
 
 // ---------- Lectura de peso ----------
@@ -159,6 +171,7 @@ void updateWeight(uint32_t now) {
   if (saved.cpg == 0) { shown = wf = 0; return; }
   wf = (rawF - tareRaw) / saved.cpg;
   if (fabsf(wf - shown) >= 0.15f) shown = wf;   // histeresis: evita parpadeo de 0.1 g
+  if (fabsf(wf - lastActW) >= 1.0f) { lastActW = wf; activity(now); }   // un cambio de peso despierta la pantalla
   if (now - lastHist >= 100) {
     lastHist = now;
     // hist[hIdx] guarda la muestra mas antigua del anillo.
@@ -171,7 +184,7 @@ void updateWeight(uint32_t now) {
 void doTare() {
   if (!haveRaw) return;
   tareRaw = (int32_t)rawF; shown = wf = 0; resetHistory(0);
-  armed = true; rising = false;
+  armed = true; rising = false; tareMs = millis();
   showToast("Tara", 800);
 }
 float sampleRaw(int n) {
@@ -226,8 +239,9 @@ void startBrew(uint32_t at) {
   state = BREW; startMs = at; lastFlowMs = millis(); reachedAt = 0; targetCue = false; armed = false; rising = false; dirty = true;
 }
 void stopBrew(uint32_t end) {
-  endMs = end; finalWeight = shown; state = DONE; dirty = true;
+  endMs = end; finalWeight = shown; state = DONE; dirty = true; doneMs = millis();
   const ModeCfg &c = curCfg(); int sec = (endMs - startMs) / 1000;
+  doneInWindow = targetG() > 0 && sec >= c.tMin && sec <= c.tMax;
   char title[40], body[120];
   snprintf(title, sizeof title, "%s listo", curDef().name);
   const char *v = targetG() <= 0 ? "" : sec < c.tMin ? " (rapido)" : sec > c.tMax ? " (lento)" : " (en tiempo)";
@@ -239,7 +253,7 @@ void resetToReady() { state = READY; armed = false; rising = false; dirty = true
 void changeMode(int steps) {
   int m = ((int)saved.mode + steps) % MODE_COUNT;
   if (m < 0) m += MODE_COUNT;
-  saved.mode = m; saveCfg(); dirty = true;
+  saved.mode = m; saveCfg(); dirty = true; modeChangedMs = millis();
 }
 void brewLogic(uint32_t now) {
   if (state == READY && curCfg().autoStart && armed && saved.cpg != 0) {
@@ -257,7 +271,7 @@ void brewLogic(uint32_t now) {
         if (!reachedAt) reachedAt = now;
         if (now - reachedAt >= 200) {
           if (!targetCue) {
-            targetCue = true;
+            targetCue = true; targetCueMs = now;
             if (curCfg().stopMode != 1) {   // filtro: avisa pero NO para el reloj
               showToast("Objetivo alcanzado", 3000);
               char title[40], body[120]; int s = (now - startMs) / 1000;
@@ -306,69 +320,108 @@ void drawWeight(float g, int x, int y, uint16_t col) {
   txt(fr, x + w + 10, y, TrackerSansBold20, col);
   txt("g", x + w + 12 + txtW(fr, TrackerSansBold20), y + 5, TrackerSansBold15, GREY);
 }
-void drawLiquid(uint32_t now, float frac, uint16_t col) {
-  if (frac <= 0.005f) return;
-  const int top = 30, bottom = 172;
-  float f = fminf(frac, 1.0f);
-  float surface = bottom - (bottom - top) * f;
-  float amp = fminf(5.0f, fminf(surface - top, bottom - surface) / 3.0f);
-  for (int x = 0; x < 320; x++) {
-    int y = int(surface + amp * WaterUpdateAnimation::waveAt(x, now));
-    y = constrain(y, top, bottom - 1);
-    cv.drawFastVLine(x, y, bottom - y, col);
-    cv.drawPixel(x, y, CREMA);
-  }
+// Mezcla un color con el negro (a = 0..1) para fundidos y aros que se desvanecen.
+uint16_t fade565(uint8_t r, uint8_t g, uint8_t b, float a) {
+  a = constrain(a, 0.0f, 1.0f);
+  return tft.color565(uint8_t(r * a), uint8_t(g * a), uint8_t(b * a));
 }
+float easeS(float t) { t = constrain(t, 0.0f, 1.0f); return t * t * (3 - 2 * t); }
+
+struct Bubble { float x, y, r, ph; bool on; };
+Bubble bubbles[9];
+uint32_t nextBubbleMs = 0, lastFrameMs = 0;
+
+// Pantalla: negro, tiempo grande, peso, y un nivel de cafe que sube con una onda suave.
 void drawMain(uint32_t now) {
   const ModeDef &d = curDef(); ModeCfg &c = curCfg();
   float target = targetG();
-  float frac = target > 0 ? shown / target : 0;
-  drawLiquid(now, frac, frac > 1.02f ? COFFEE_OVER : COFFEE);
+  float frac = target > 0 ? fmaxf(shown, 0.0f) / target : 0;
+  float flowNow = fmaxf(flow, 0.0f);
+  bool running = state == BREW;
+  float dt = lastFrameMs ? fminf(0.05f, (now - lastFrameMs) / 1000.0f) : 0.033f; lastFrameMs = now;
+  fracShown += (fminf(frac, 1.0f) - fracShown) * fminf(1.0f, dt * 6);        // el nivel sube suave
 
-  // Cabecera: modo + objetivo
-  txt(d.name, 8, 4, TrackerSansBold15, YELLOW);
+  // ---- nivel de cafe: color plano, onda suave y linea de crema ----
+  bool over = target > 0 && frac > 1.02f;
+  bool okc = (state == DONE && doneInWindow) || (running && targetCue);
+  if (fracShown > 0.004f) {
+    const int top = 6, bottom = 172;
+    float surface = bottom - (bottom - top) * fracShown;
+    float amp = 1.2f + (running ? fminf(3.2f, flowNow) : 0.0f);
+    uint16_t fill = over ? LEVEL_OVER : (state == DONE && doneInWindow ? LEVEL_OK : LEVEL);
+    uint16_t line = over ? CREMA_OVER : (okc ? CREMA_OK : CREMA);
+    for (int x = 0; x < 320; x++) {
+      float w = WaterUpdateAnimation::waveAt(x, now);
+      int y = constrain(int(surface + amp * w), top, bottom - 1);
+      cv.drawFastVLine(x, y, bottom - y, fill);
+      cv.drawPixel(x, y, line); cv.drawPixel(x, y + 1, line);
+    }
+    // pocas burbujas suaves
+    if (running && flowNow > 0.5f && now > nextBubbleMs) {
+      for (auto &bb : bubbles) if (!bb.on) { bb = {float(30 + random(260)), 172.0f, 1.2f + random(14) / 10.0f, float(random(6))}; bb.on = true; break; }
+      nextBubbleMs = now + 260;
+    }
+    for (auto &bb : bubbles) if (bb.on) {
+      bb.y -= (16 + bb.r * 5) * dt; bb.x += sinf(now * 0.004f + bb.ph) * 5 * dt;
+      if (bb.y < surface + 4) bb.on = false; else cv.drawCircle(int(bb.x), int(bb.y), int(bb.r + 0.5f), BUBBLE);
+    }
+  } else for (auto &bb : bubbles) bb.on = false;
+
+  // ---- cabecera: modo (con fundido y desplazamiento al cambiar) y objetivo ----
+  float k = easeS((now - modeChangedMs) / 240.0f);
+  txt(d.name, 14 + int((1 - k) * 22), 10, TrackerSansRegular12, fade565(0xCE, 0xCF, 0xCE, 0.25f + 0.75f * k));
   if (target > 0) {
     char b[48];
-    snprintf(b, sizeof b, "%.0fg > %.0fg  %s-%s", c.dose, target, fmtT(c.tMin).c_str(), fmtT(c.tMax).c_str());
-    txt(b, 312, 6, TrackerSansRegular12, WHITE, TR_DATUM);
+    snprintf(b, sizeof b, "%.0f > %.0f g   %s-%s", c.dose, target, fmtT(c.tMin).c_str(), fmtT(c.tMax).c_str());
+    txt(b, 306, 11, TrackerSansRegular12, TXT_DIM, TR_DATUM);
   }
 
-  // Tiempo grande
-  uint32_t ms = state == BREW ? now - startMs : state == DONE ? endMs - startMs : 0;
+  // ---- tiempo grande (salta 3 px cada segundo) ----
+  uint32_t ms = running ? now - startMs : state == DONE ? endMs - startMs : 0;
   int sec = ms / 1000, tenth = (ms / 100) % 10;
-  char tb[8]; snprintf(tb, sizeof tb, "%02d:%02d", sec / 60, sec % 60);
+  if (sec != lastSecShown) { lastSecShown = sec; secMs = now; }
   uint16_t tcol = WHITE;
-  if (target > 0 && (state == BREW || state == DONE)) {
+  if (target > 0 && (running || state == DONE)) {
     if (sec > c.tMax) tcol = RED;
     else if (sec >= c.tMin) tcol = GREEN;
   }
-  int tw = txtW(tb, Jersey10Digits96), th = fontH(Jersey10Digits96);
-  int x0 = (320 - (tw + 26)) / 2;
-  txt(tb, x0, 22, Jersey10Digits96, tcol);
-  cv.fillCircle(x0 + tw + 6, 22 + th - 14, 3, tcol);
-  txt(String(tenth), x0 + tw + 12, 22 + th - 26, TrackerSansBold20, tcol);
-
-  // Peso y caudal
-  drawWeight(shown, 10, 128, WHITE);
-  if (state == BREW || state == DONE) {
-    char b[16]; snprintf(b, sizeof b, "%.1f g/s", fmaxf(flow, 0.0f));
-    txt(b, 312, 134, TrackerSansBold15, WHITE, TR_DATUM);
+  char tb[16]; snprintf(tb, sizeof tb, "%02d:%02d", sec / 60, sec % 60);
+  int tw = txtW(tb, Jersey10Digits96);
+  int tick = running ? int((1 - easeS((now - secMs) / 170.0f)) * 3) : 0;
+  txt(tb, (320 - tw) / 2, 20 - tick, Jersey10Digits96, tcol);
+  if (running || state == DONE) {
+    cv.fillCircle((320 + tw) / 2 + 8, 88, 2, TXT_DIM);
+    txt(String(tenth), (320 + tw) / 2 + 14, 70, TrackerSansBold15, TXT_DIM);
   }
 
-  // Linea de estado
-  String hint;
-  if (millis() < toastUntil) hint = toast;
-  else if (saved.cpg == 0) hint = "Sin calibrar: manten el boton azul";
-  else if (state == READY) hint = armed && c.autoStart ? "Listo: arranca solo al caer cafe" : "Pulsa pomo: tara   Azul: inicio";
-  else if (state == BREW) hint = "Azul: parar   Pomo: tara";
-  else {
-    char b[64];
-    float ratio = c.dose > 0 ? finalWeight / c.dose : 0;
-    const char *verdict = target <= 0 ? "" : sec < c.tMin ? "  rapido" : sec > c.tMax ? "  lento" : "  en tiempo";
-    snprintf(b, sizeof b, "%.1fg  Ratio 1:%.1f%s", finalWeight, ratio, verdict);
-    hint = b;
+  // ---- peso (izquierda) y caudal / ratio / aviso (derecha) ----
+  drawWeight(shown, 14, 126, WHITE);
+  String right;
+  char rb[24];
+  if (millis() < toastUntil) right = toast;
+  else if (running && targetCue && c.stopMode != 1) right = "objetivo";
+  else if (running) { snprintf(rb, sizeof rb, "%.1f g/s", flowNow); right = rb; }
+  else if (state == DONE && c.dose > 0) { snprintf(rb, sizeof rb, "1:%.1f", finalWeight / c.dose); right = rb; }
+  if (right.length()) txt(right, 306, 134, TrackerSansBold15, TXT_RIGHT, TR_DATUM);
+  // pista discreta solo cuando hace falta
+  if (state == READY) {
+    if (saved.cpg == 0) txt("Sin calibrar: azul largo > Ajustes", 160, 152, TrackerSansRegular12, RED, TC_DATUM);
+    else if (!armed) txt("pomo: tara", 160, 154, TrackerSansRegular12, TXT_DIMMER, TC_DATUM);
+    else { cv.fillCircle(160, 18, 3, c.autoStart ? GREEN : GREY); }
+    if (!armed) cv.drawCircle(160, 18, 3, GREY);
   }
-  txt(hint, 160, 156, TrackerSansRegular12, WHITE, TC_DATUM);
+
+  // ---- tara: aro azul alrededor del peso ----
+  float tt = (now - tareMs) / 600.0f;
+  if (tareMs && tt >= 0 && tt < 1)
+    cv.drawRoundRect(10 - int(tt * 6), 120 - int(tt * 6), 80 + int(tt * 12), 34 + int(tt * 12), 8, fade565(80, 150, 255, 1 - tt));
+  // ---- objetivo alcanzado con el reloj en marcha (filtro): aro verde, sin parar ----
+  float cr = (now - targetCueMs) / 800.0f;
+  if (running && targetCueMs && cr >= 0 && cr < 1) cv.drawCircle(160, 86, 20 + int(cr * 190), fade565(63, 211, 106, 1 - cr));
+  // ---- reloj parado: pulso (aro que se expande) ----
+  float pr = (now - doneMs) / 800.0f;
+  if (state == DONE && target > 0 && doneMs && pr >= 0 && pr < 1)
+    cv.drawCircle(160, 86, 20 + int(pr * 190), doneInWindow ? fade565(63, 211, 106, 1 - pr) : fade565(255, 140, 60, 1 - pr));
 }
 String menuLabel(int r) {
   switch (r) {
@@ -457,7 +510,7 @@ void runWifiPortal() {
 void openMenu() { state = MENU; menuRow = 0; dirty = true; }
 void handleInput(uint32_t now) {
   int steps = takeSteps(), e = encBtn.poll(), b = blueBtn.poll();
-  if (steps || e || b) dirty = true;
+  if (steps || e || b) { dirty = true; activity(now); }
   switch (state) {
     case READY:
       if (steps) changeMode(steps);
@@ -547,20 +600,20 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_A), encoderISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_B), encoderISR, CHANGE);
 
-  pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, LOW);
+  ledcAttach(TFT_BL, 5000, 8); setBacklight(0);
   delay(150);
   tft.init(); tft.setRotation(3); // Horizontal, girada 180 grados (igual que el Water Tracker).
   tft.writecommand(TFT_MADCTL);
   tft.writedata(TFT_MAD_MV | TFT_MAD_MY | TFT_MAD_BGR);
   cv.setColorDepth(16);
   if (!cv.createSprite(320, 172)) {
-    tft.fillScreen(BLACK); digitalWrite(TFT_BL, HIGH);
+    tft.fillScreen(BLACK); setBacklight(BL_FULL);
     tft.setTextColor(WHITE, BLACK); tft.setCursor(10, 30);
     tft.print("Sin memoria para el frame");
     while (true) delay(1000);
   }
   cv.setTextWrap(false);
-  digitalWrite(TFT_BL, HIGH);
+  setBacklight(BL_FULL); lastActivityMs = millis();
 
   // Configuracion por defecto y carga desde flash.
   for (int i = 0; i < MODE_COUNT; i++)
@@ -594,8 +647,11 @@ void loop() {
   if (readScale(now)) updateWeight(now);
   handleInput(now);
   brewLogic(now);
+  if (state != READY) lastActivityMs = now;                       // preparando, terminado o en menus: no se atenua
+  if (state == READY && !dimmed && now - lastActivityMs > DIM_AFTER_MS) { dimmed = true; setBacklight(BL_DIM); }
   bool animate = state <= DONE;
-  if ((animate && now - lastDraw >= 33) || (dirty && now - lastDraw >= 20) ||
+  uint32_t frameMs = dimmed ? 500 : 33;                           // atenuada: casi sin redibujar
+  if ((animate && now - lastDraw >= frameMs) || (dirty && now - lastDraw >= 20) ||
       (toastUntil && now > toastUntil)) {
     if (toastUntil && now > toastUntil) toastUntil = 0;
     draw();

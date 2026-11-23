@@ -7,7 +7,7 @@ de Aaron Broom (hardware, guía de montaje) y [todayicreated/water-tracker](http
 | --- | --- |
 | `bascula.scad`, `preview.png` | Boceto v1 (varias celdas, pantalla redonda). Descartado. |
 | `bascula_v2.scad`, `preview_v2.png` | Boceto v2: distribución del Water Tracker. |
-| `img/` (conjunto, controles, despiezado, interior y piezas), `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
+| `img/` (conjunto, vista superior, controles, despiezado, interior y piezas), `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
 | `bascula_v3.scad` | **Actual (v3.1)**: montaje con una celda de barra (extremo fijo a la base, extremo libre a la plataforma). 152 × 188 mm, plataforma útil ~142 × 142 mm, para el Hario V60 Termo 800 ml. |
 | `firmware/CoffeeScale/` | Firmware con temporizador y modos de café. Ver su README. |
 
@@ -85,6 +85,11 @@ La altura de la carcasa ahora se calcula (27,2 mm) para que la tapa quede a ras 
 - **Ventana de la pantalla:** esquinas redondeadas y bisel de 0,6 mm.
 - En el conjunto se dibuja un módulo de pantalla de ejemplo para que la ventana no se vea vacía (no se imprime).
 - 36 parejas de piezas, incluidos pomo y botón, comprobadas sin solape.
+
+## v3.4: aspecto
+- **Panel en cápsula** con 6 mm de marco blanco alrededor; el pomo y el botón quedan concéntricos con los extremos de la cápsula, como en el Water Tracker.
+- **Nervios en forma de píldora** (11, de distintas longitudes, con los dos puntos de las esquinas) y cantos suavizados; antes eran bloques cortados en bisel contra el borde.
+- 36 parejas de piezas sin solape (volumen medido < 0,01 mm³).
 
 ## Antes de imprimir todo: `test_ajuste`
 `pieza = "test_ajuste"` (o `stl/test_ajuste.stl`) es una placa pequeña (~143 × 74 mm, 3 mm) de unos 15–20 min de impresión:

@@ -1,0 +1,5 @@
+CoffeeScale_sketch.inc
+*.h
+!stubs/*.h
+!src/hx711/HX711.h
+test_host
