@@ -7,7 +7,7 @@ de Aaron Broom (hardware, guía de montaje) y [todayicreated/water-tracker](http
 | --- | --- |
 | `bascula.scad`, `preview.png` | Boceto v1 (varias celdas, pantalla redonda). Descartado. |
 | `bascula_v2.scad`, `preview_v2.png` | Boceto v2: distribución del Water Tracker. |
-| `img/` (conjunto, despiezado, interior y piezas de la v3), `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
+| `img/` (conjunto, controles, despiezado, interior y piezas), `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
 | `bascula_v3.scad` | **Actual (v3.1)**: montaje con una celda de barra (extremo fijo a la base, extremo libre a la plataforma). 152 × 188 mm, plataforma útil ~142 × 142 mm, para el Hario V60 Termo 800 ml. |
 | `firmware/CoffeeScale/` | Firmware con temporizador y modos de café. Ver su README. |
 
@@ -77,6 +77,14 @@ La altura de la carcasa ahora se calcula (27,2 mm) para que la tapa quede a ras 
 | Posición de los agujeros de fijación de las placas | **No usados**: se sujetan con bridas y cinta |
 
 `test_ajuste` incluye ahora tres **marcos de comprobación** (pantalla, HX711, ESP32): deja caer cada placa y comprueba que entra con holgura.
+
+## v3.3: acabado
+- **Cantos redondeados:** canto superior de la carcasa (1,5 mm) y canto inferior de la base (1,2 mm).
+- **Pomo:** 16 estrías, canto redondeado, concavidad superior de 0,9 mm, hueco para la tuerca del encoder (la tuerca queda dentro, tapada) y eje en D de 6 mm. El eje del KY-040 es una **estimación**: mide el tuyo (`shaft_d`, `shaft_flat`).
+- **Botón:** tecla redondeada de 18 × 18 mm (antes un disco de 15 mm que dejaba al aire las esquinas del hueco MX de 14 × 14 mm) con zócalo en cruz para el interruptor. Las medidas del zócalo son las típicas de MX: verifícalas con tu interruptor.
+- **Ventana de la pantalla:** esquinas redondeadas y bisel de 0,6 mm.
+- En el conjunto se dibuja un módulo de pantalla de ejemplo para que la ventana no se vea vacía (no se imprime).
+- 36 parejas de piezas, incluidos pomo y botón, comprobadas sin solape.
 
 ## Antes de imprimir todo: `test_ajuste`
 `pieza = "test_ajuste"` (o `stl/test_ajuste.stl`) es una placa pequeña (~143 × 74 mm, 3 mm) de unos 15–20 min de impresión:

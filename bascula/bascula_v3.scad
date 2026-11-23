@@ -5,6 +5,7 @@
 //
 // pieza: base | carcasa | plataforma | tapa | nervios | separador | panel | soporte_pantalla | pomo | boton | test_ajuste | todo
 pieza = "todo";
+$fn = 48;   // suavidad de las curvas
 
 // ============ DATOS A VERIFICAR CON TUS PIEZAS REALES (son estimaciones) ============
 disp_w = 34.2; disp_h = 19.2;  // ventana de la pantalla 1.47" DFRobot DFR0995: área visible 33.8 x 19.1 mm (hoja de datos DFRobot)
@@ -64,13 +65,23 @@ tray_h = tray_floor + disp_t;          // altura de la bandeja (el módulo queda
 disp_post_len = tray_h - ear_t;
 
 // --- Controles ---
-pomo_d = 26; boton_d = 15;
+pomo_d = 26; pomo_h = 14;       // pomo con estrías y concavidad superior
+shaft_d = 6; shaft_flat = 4.6;  // eje del encoder KY-040 (en D): ESTIMADO, mide el tuyo
+boton_d = 18; boton_h = 7;      // tecla redondeada 18 x 18 mm: cubre las esquinas del hueco MX de 14 x 14
 nervio_w = 8; nervio_h = 2; paso = 19;
 post_d = 8; post_h = 16;
 enc_x = -(W/2 - pared - pomo_d/2 - 6);   // posición X del encoder
 btn_x =  (W/2 - pared - boton_d/2 - 8);  // posición X del botón
 
 module rrect(w,d,h,r){ linear_extrude(h) offset(r) square([w-2*r,d-2*r],center=true); }
+// caja redondeada con el canto SUPERIOR suavizado (radio f)
+module rrect_fillet(w,d,h,r,f,n=6) {
+  hull() {
+    rrect(w,d,h-f,r);
+    for (i=[1:n]) { a=90*i/n; k=f*(1-cos(a));
+      translate([0,0,h-f+f*sin(a)-0.01*(i==n?0:0)]) rrect(w-2*k,d-2*k,0.01,max(r-k,0.5)); }
+  }
+}
 
 // origen local = extremo fijo de la celda; +X apunta al extremo libre.
 // El punto medio de los 2 taladros del extremo libre queda en el centro de la plataforma.
@@ -94,7 +105,7 @@ module nest(l,w,lift,bar,wall=2,wh=4) {
 module base() {
   difference() {
     union() {
-      rrect(W,D,base_t,R);
+      translate([0,0,base_t]) mirror([0,0,1]) rrect_fillet(W,D,base_t,R,1.2);   // canto inferior redondeado
       // soporte (boss) bajo el extremo fijo
       translate([0,0,base_t]) cell_frame() translate([-2,-cell_w/2-2,0]) cube([fix_holes[1]+12, cell_w+4, boss]);
       // patas
@@ -118,7 +129,8 @@ module base() {
   }
 }
 
-module carcasa() {   // marco con cubierta en el frente (panel de control); ventana trasera para la plataforma
+module carcasa() { intersection() { carcasa_raw(); rrect_fillet(W,D,H,R,1.5); } }   // canto superior redondeado
+module carcasa_raw() {   // marco con cubierta en el frente (panel de control); ventana trasera para la plataforma
   difference() {
     union() {
       difference() {
@@ -128,7 +140,7 @@ module carcasa() {   // marco con cubierta en el frente (panel de control); vent
         translate([0,-D/2+panel_d/2+pared,H-2]) rrect(W-2*pared-1,panel_d,3,R-pared);  // bolsillo del panel
         translate([esp_x,D/2,esp_usb_z]) cube([usb_w,2*pared+2,usb_h],center=true);   // USB-C del ESP32 (trasero)
         // huecos que atraviesan la cubierta bajo el panel: pantalla, encoder y interruptor
-        translate([-disp_w/2,yc-disp_h/2,H-4]) cube([disp_w,disp_h,5]);
+        translate([0,yc,H-4]) rrect(disp_w,disp_h,5,1.5);
         translate([enc_x,yc,H-4]) cylinder(d=enc_hole,h=5,$fn=32);
         translate([btn_x-mx_hole/2,yc-mx_hole/2,H-4]) cube([mx_hole,mx_hole,5]);
       }
@@ -144,7 +156,9 @@ module carcasa() {   // marco con cubierta en el frente (panel de control); vent
 module panel() {     // inserto negro del frente
   translate([0,yc,H-2]) difference() {
     rrect(W-2*pared-1.4,panel_d-0.4,2,R-pared);
-    translate([0,0,1]) cube([disp_w,disp_h,4],center=true);                              // pantalla (atraviesa el grosor)
+    // ventana de la pantalla: esquinas redondeadas y bisel de 0,6 mm hacia arriba
+    hull() { translate([0,0,-0.5]) rrect(disp_w,disp_h,0.01,1.5); translate([0,0,2]) rrect(disp_w+1.2,disp_h+1.2,0.01,2.1); }
+    translate([0,0,-0.5]) rrect(disp_w,disp_h,3,1.5);
     translate([enc_x,0,-1]) cylinder(d=enc_hole,h=4,$fn=32);                             // eje del encoder
     translate([btn_x-mx_hole/2,-mx_hole/2,-1]) cube([mx_hole,mx_hole,4]);                // interruptor MX
   }
@@ -224,8 +238,30 @@ module nervios() {   // nervios diagonales rojos sobre la tapa (segundo color o 
       linear_extrude(nervio_h+0.02) offset(nervio_w/2) square([0.01,220-abs(i)*12],center=true);
   }
 }
-module pomo()  { cylinder(d=pomo_d,h=12,$fn=24); }
-module boton() { cylinder(d=boton_d,h=8,$fn=32); }
+module pomo() {   // pomo con estrías, canto redondeado, concavidad superior, hueco para la tuerca y eje en D
+  r = pomo_d/2; fl = 2.5;
+  difference() {
+    rotate_extrude($fn=96) polygon(concat([[0,0],[r,0]],
+      [for (a=[0:10:90]) [r-fl+fl*cos(a), pomo_h-fl+fl*sin(a)]], [[0,pomo_h]]));
+    for (i=[0:15]) rotate(i*360/16) translate([r+0.3,0,-1]) cylinder(d=3.2,h=pomo_h+2,$fn=24);   // estrías
+    translate([0,0,pomo_h-0.9+60]) sphere(r=60,$fn=120);                                            // concavidad (0,9 mm)
+    translate([0,0,-1]) cylinder(d=12,h=1+3.6,$fn=48);                                               // hueco de la tuerca
+    translate([0,0,-1]) linear_extrude(11) difference() {                                            // eje en D
+      circle(d=shaft_d+0.2,$fn=40);
+      translate([shaft_flat-shaft_d/2+0.1,-5]) square(10);
+    }
+  }
+}
+module boton() {  // tecla redondeada con zócalo en cruz para el interruptor MX (medidas MX típicas: verifícalas)
+  difference() {
+    hull() {
+      rrect(boton_d,boton_d,boton_h-2.5,4.5);
+      translate([0,0,boton_h-2.5]) rrect(boton_d-2.4,boton_d-2.4,2.5,3.6);
+    }
+    translate([-2.075,-0.65,-1]) cube([4.15,1.3,6]);
+    translate([-0.65,-2.075,-1]) cube([1.3,4.15,6]);
+  }
+}
 module celda() { color("#b8bec4") cell_frame() translate([0,-cell_w/2,0]) cube([cell_L,cell_w,cell_h]); }
 module celda_en_z() { translate([0,0,zc]) celda(); }
 
@@ -258,10 +294,12 @@ module vista() {
   color("#8a8f96") translate([0,cy,zc+cell_h]) rotate(cell_angle) separador();
   color("#1a1a1a") translate([0,0,base_t]) panel();
   color("#c9a227") translate([0,yc,base_t+H-deck-tray_h]) soporte_pantalla();
+  // módulo de pantalla de ejemplo (solo para la vista; no se imprime)
+  color("#0c1020") translate([0,yc,base_t+H-deck-disp_t/2]) cube([disp_mod_l,disp_mod_w,disp_t],center=true);
   color("#f2efe6") translate([0,cy,zp]) { plataforma(); tapa(); }
   color("#d62d2d") translate([0,cy,zp]) nervios();
-  color("#f5c518") translate([enc_x,-D/2+panel_d/2+pared,base_t+H]) pomo();
-  color("#2a6fdb") translate([btn_x,-D/2+panel_d/2+pared,base_t+H]) boton();
+  color("#f5c518") translate([enc_x,yc,base_t+H+0.4]) pomo();
+  color("#2a6fdb") translate([btn_x,yc,base_t+H+1.2]) boton();
 }
 
 if (pieza=="base") base();
