@@ -59,14 +59,33 @@ entera. Con el servidor lleno (~0,8 kg de café + ~0,7 kg de servidor + dripper)
 
 La altura de la carcasa ahora se calcula (27,2 mm) para que la tapa quede a ras del borde.
 
+## v3.2: soportes de la electrónica
+- **Nido del ESP32** (sobre la base, a la derecha): apoyo central + paredes laterales + tope. El USB-C de la propia placa queda frente a una abertura de 14 × 8 mm en la pared trasera: sirve para **alimentar y programar** sin abrir la caja. Por eso ya **no hace falta el conector USB-C hembra de 2 pines** de la guía (puedes seguir usándolo si prefieres). Con `esp_pins_down = true` (por defecto) el apoyo es de 11 mm y deja sitio para los pines soldados por debajo; con `false`, 2 mm.
+- **Nido del HX711** (a la izquierda-atrás): almohadilla con paredes. Además de las bridas, la guía original lo pega con cinta de doble cara.
+- **Sujeción con bridas (zip ties)**: cada nido tiene 2 ranuras en la base a ambos lados; la brida cruza la placa por encima. Cabe bajo la base gracias a las patas de 3 mm. Así no dependo de los agujeros de las placas, que varían entre fabricantes.
+- **Bandeja de la pantalla** (`soporte_pantalla`): alojamiento de 44,9 × 19,9 mm para el módulo DFRobot, con paso para la regleta de pines. Aprieta el módulo contra la cara inferior de la cubierta, justo bajo la ventana, con **2 tornillos M2×8** (los que la guía dedicaba a pantalla y LEDs) que suben desde las orejas hasta dos postes de la carcasa.
+- **Corregido:** bajo el panel negro quedaba 1 mm de cubierta sin cortar que tapaba la pantalla, el encoder y el botón; ahora hay huecos que atraviesan toda la cubierta. La ventana de pantalla pasa a 34,2 × 19,2 mm (el área visible es 33,8 × 19,1 mm; antes era 36 × 19 y quedaba 0,1 mm corta).
+- **Encoder:** su casquillo sube por el agujero de la cubierta y se aprieta con la tuerca por encima (la cubre el pomo), como en la guía. **Interruptor MX:** entra a presión en el hueco de 14 × 14 mm; la cubierta + panel suman 3 mm, más gruesa que una placa de teclado (1,5 mm), así que añade una gota de pegamento.
+
+### Qué es dato y qué es estimación
+| Dato | Origen |
+| --- | --- |
+| Módulo de pantalla 44,5 × 19,5 mm; área visible 33,8 × 19,1 mm | [DFRobot (DFR0995)](https://wiki.dfrobot.com/dfr0995/) |
+| Grosor del módulo (5,5 mm) y posición de la regleta de pines | **Estimado: mide tu módulo** (`disp_t`) |
+| ESP32 55 × 28 mm | **Estimado** (hay de 51 a 55 mm de largo, 25 a 28 de ancho) |
+| HX711 34 × 21 mm | **Estimado** (el más común; no hay un tamaño estándar) |
+| Posición de los agujeros de fijación de las placas | **No usados**: se sujetan con bridas y cinta |
+
+`test_ajuste` incluye ahora tres **marcos de comprobación** (pantalla, HX711, ESP32): deja caer cada placa y comprueba que entra con holgura.
+
 ## Antes de imprimir todo: `test_ajuste`
 `pieza = "test_ajuste"` (o `stl/test_ajuste.stl`) es una placa pequeña (~143 × 74 mm, 3 mm) de unos 15–20 min de impresión:
 - **Placa de controles:** ventana de pantalla (36 × 19 mm), agujero del encoder (7,5 mm) y hueco del interruptor MX (14 × 14 mm). Comprueba que tus piezas entran.
 - **Plantilla de la celda:** apoya tu celda en el alojamiento y comprueba que los taladros M5 (a 6 y 21 mm) y M4 (a 5 y 15 mm del extremo) coinciden. Si no, cambia `fix_holes`, `free_holes` y las medidas de la celda en el `.scad`.
 
-## Comprobaciones hechas con OpenSCAD 2021.01 (v3.1)
-- Las 9 piezas compilan sin errores ni avisos y son sólidos válidos.
-- Sin choques entre celda, base, carcasa, separador, plataforma, tapa, nervios y panel. Los 4 pivotes de la tapa solapan con los agujeros a propósito (ajuste a presión).
-- La celda cabe dentro de la carcasa a 45°.
+## Comprobaciones hechas con OpenSCAD 2021.01 (v3.2)
+- Las 11 piezas compilan sin errores ni avisos y son sólidos válidos.
+- **21 parejas de piezas** (base, carcasa, celda, separador, plataforma con nervios, panel y bandeja) comprobadas: sin solapes. Dos parejas muestran caras que se tocan; el volumen de solape medido es 0,000000 mm³.
+- La celda cabe en la carcasa a 45°; los nidos no tocan las paredes ni los postes; el ESP32 con pines por debajo queda 1,8 mm por debajo de las costillas de la plataforma.
 - Medidas: carcasa 152 × 188 × 27,2 mm; base 7 mm (+3 mm de patas); plataforma 142,2 × 142,2 mm.
-- **No comprobado:** impresión real, el ajuste a presión de los pivotes (depende de tu impresora), la rigidez real de la plataforma, y el ajuste con pantalla, encoder, ESP32 y celda reales (el modelo no incluye soportes para el ESP32, el HX711 ni la pantalla).
+- **No comprobado:** impresión real, ajuste a presión de los pivotes, rigidez real de la plataforma, y el encaje con tus placas, que depende de las estimaciones de arriba. El punzón de los tornillos M2×8 de la bandeja llega casi a la cara superior de la cubierta: si asoma, usa M2×6.

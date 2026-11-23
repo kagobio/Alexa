@@ -3,11 +3,16 @@
 // Dimensionada para el Hario V60 Termo acero inox. 800 ml (cuerpo ~135 mm; 182 x 135 x 172 mm con asa).
 // Compilado con OpenSCAD 2021.01. No impreso todavía: imprime antes "test_ajuste" (ver README).
 //
-// pieza: base | carcasa | plataforma | tapa | nervios | separador | panel | pomo | boton | test_ajuste | todo
+// pieza: base | carcasa | plataforma | tapa | nervios | separador | panel | soporte_pantalla | pomo | boton | test_ajuste | todo
 pieza = "todo";
 
 // ============ DATOS A VERIFICAR CON TUS PIEZAS REALES (son estimaciones) ============
-disp_w = 36; disp_h = 19;      // ventana visible de la pantalla 1.47" (DFRobot). MIDE tu módulo.
+disp_w = 34.2; disp_h = 19.2;  // ventana de la pantalla 1.47" DFRobot DFR0995: área visible 33.8 x 19.1 mm (hoja de datos DFRobot)
+disp_mod_l = 44.5; disp_mod_w = 19.5;   // módulo DFR0995: 44.5 x 19.5 mm (DFRobot). Grosor y posición de la regleta: MIDE.
+disp_t = 5.5;                  // ESTIMADO: grosor del módulo (PCB + cristal). MIDE y ajusta: la bandeja lo aprieta contra la carcasa.
+esp_l = 55; esp_w = 28;        // ESTIMADO: placa ESP32 DevKit (51-55 x 25-28 mm según modelo). MIDE la tuya.
+esp_pins_down = true;          // true: pines soldados por debajo (lo habitual en DevKit); false: pines hacia arriba
+hx_l = 34; hx_w = 21;          // ESTIMADO: módulo HX711 genérico (34 x 21 mm; hay de 22x22, 38x22...). MIDE el tuyo.
 enc_hole = 7.5;                // agujero del casquillo del encoder (KY-040: ~7 mm de rosca). MIDE.
 mx_hole  = 14.0;               // hueco del interruptor MX low profile (cuadrado). MIDE.
 cell_L = 80; cell_w = 12.7; cell_h = 12.7;   // celda de barra de 5 kg. MIDE la tuya.
@@ -43,6 +48,21 @@ cy = panel_d/2;                        // centro de la plataforma en Y (los cont
 free_sp = free_holes[1] - free_holes[0];
 free_mid = cell_L - (free_holes[0] + free_holes[1]) / 2;   // punto medio de los taladros libres (desde el extremo fijo)
 
+// --- Electrónica sobre la base ---
+yc = -D/2 + panel_d/2 + pared;         // centro (Y) de la franja de control
+esp_x = 38;                            // ESP32: a la derecha, largo en Y, con el USB hacia la pared trasera
+esp_lift = esp_pins_down ? 11 : 2;     // altura de apoyo (los pines van por debajo si esp_pins_down)
+esp_bar = esp_pins_down ? esp_w - 9 : esp_w;   // apoyo central: deja libres los laterales para los pines
+esp_y = D/2 - pared - 0.3 - (esp_l+0.4)/2;     // centro del ESP32 (el USB toca casi la pared trasera)
+hx_x = -48; hx_y = 48;                 // HX711: a la izquierda-atrás, largo en X
+nest_wall = 2; nest_wh = 4;            // pared y altura extra del nido sobre el apoyo
+esp_usb_z = esp_lift + 1.6 + 1.6;      // altura del centro del conector USB sobre la base (PCB 1,6 + mitad del conector)
+usb_w = 14; usb_h = 8;                 // abertura trasera para el enchufe USB-C
+disp_post_x = disp_mod_l/2 + 6.2;      // posición X de los postes de la bandeja (fuera del cuerpo de la bandeja: sin solape)
+tray_floor = 1.5; ear_t = 2.5;
+tray_h = tray_floor + disp_t;          // altura de la bandeja (el módulo queda pegado a la cara inferior de la cubierta)
+disp_post_len = tray_h - ear_t;
+
 // --- Controles ---
 pomo_d = 26; boton_d = 15;
 nervio_w = 8; nervio_h = 2; paso = 19;
@@ -64,6 +84,13 @@ function peg_pts() = [[-(plat_w/2-14),-(plat_d/2-14)],[ (plat_w/2-14),-(plat_d/2
 function foot_pts() = [[-(W/2-16),-(D/2-16)],[ (W/2-16),-(D/2-16)],
                        [-(W/2-16), (D/2-16)],[ (W/2-16), (D/2-16)]];
 
+// Nido para una placa: apoyo central + paredes laterales + tope en un extremo; el extremo +X queda abierto.
+module nest(l,w,lift,bar,wall=2,wh=4) {
+  translate([-l/2,-bar/2,0]) cube([l,bar,lift]);
+  for (sg=[-1,1]) translate([-l/2, sg>0 ? w/2 : -w/2-wall, 0]) cube([l,wall,lift+wh]);
+  translate([-l/2-wall,-w/2-wall,0]) cube([wall,w+2*wall,lift+wh]);
+}
+
 module base() {
   difference() {
     union() {
@@ -72,6 +99,14 @@ module base() {
       translate([0,0,base_t]) cell_frame() translate([-2,-cell_w/2-2,0]) cube([fix_holes[1]+12, cell_w+4, boss]);
       // patas
       for (p=foot_pts()) translate([p[0],p[1],-foot_h]) cylinder(d=14,h=foot_h+0.01,$fn=36);
+      // nido del ESP32 (USB hacia la pared trasera) y del HX711
+      translate([esp_x,esp_y,base_t]) rotate(90) nest(esp_l+0.4,esp_w+0.4,esp_lift,esp_bar,nest_wall,nest_wh);
+      translate([hx_x,hx_y,base_t]) nest(hx_l+0.4,hx_w+0.4,2,hx_w+0.4,nest_wall,nest_wh);
+    }
+    // ranuras para bridas (cruzan la placa por encima): ESP32 a ambos lados, HX711 a ambos lados
+    for (sg=[-1,1]) {
+      translate([esp_x+sg*((esp_w+0.4)/2+nest_wall+1.5)-0.8, esp_y-1.9, -1]) cube([1.6,3.8,base_t+2]);
+      translate([hx_x-1.9, hx_y+sg*((hx_w+0.4)/2+nest_wall+1.5)-0.8, -1]) cube([3.8,1.6,base_t+2]);
     }
     // taladros M5 de la celda, con rebaje por debajo para la cabeza (d9.5 x 1.5)
     cell_frame() for (p=fix_holes) translate([p,0,-foot_h-1]) {
@@ -91,20 +126,43 @@ module carcasa() {   // marco con cubierta en el frente (panel de control); vent
         translate([0,0,-1]) rrect(W-2*pared,D-2*pared,H-deck+1,R-pared);        // cavidad
         translate([0,cy,H-deck-1]) rrect(plat_w+2*gap,plat_d+2*gap,deck+2,10);  // ventana plataforma
         translate([0,-D/2+panel_d/2+pared,H-2]) rrect(W-2*pared-1,panel_d,3,R-pared);  // bolsillo del panel
-        translate([0,D/2,12]) cube([10,2*pared+2,4],center=true);                // USB-C trasero
+        translate([esp_x,D/2,esp_usb_z]) cube([usb_w,2*pared+2,usb_h],center=true);   // USB-C del ESP32 (trasero)
+        // huecos que atraviesan la cubierta bajo el panel: pantalla, encoder y interruptor
+        translate([-disp_w/2,yc-disp_h/2,H-4]) cube([disp_w,disp_h,5]);
+        translate([enc_x,yc,H-4]) cylinder(d=enc_hole,h=5,$fn=32);
+        translate([btn_x-mx_hole/2,yc-mx_hole/2,H-4]) cube([mx_hole,mx_hole,5]);
       }
       for (p=screw_pts()) translate([p[0],p[1],0]) cylinder(d=post_d,h=post_h,$fn=28);
+      // postes bajo la cubierta para atornillar la bandeja de la pantalla (M2)
+      for (sg=[-1,1]) translate([sg*disp_post_x,yc,H-deck-disp_post_len]) cylinder(d=6,h=disp_post_len+0.01,$fn=28);
     }
     for (p=screw_pts()) translate([p[0],p[1],-1]) cylinder(d=2.2,h=post_h+1,$fn=20);   // agujero guía
+    for (sg=[-1,1]) translate([sg*disp_post_x,yc,H-deck-disp_post_len-1]) cylinder(d=1.8,h=disp_post_len+1.6,$fn=20);
   }
 }
 
 module panel() {     // inserto negro del frente
-  translate([0,-D/2+panel_d/2+pared,H-2]) difference() {
+  translate([0,yc,H-2]) difference() {
     rrect(W-2*pared-1.4,panel_d-0.4,2,R-pared);
     translate([0,0,1]) cube([disp_w,disp_h,4],center=true);                              // pantalla (atraviesa el grosor)
     translate([enc_x,0,-1]) cylinder(d=enc_hole,h=4,$fn=32);                             // eje del encoder
     translate([btn_x-mx_hole/2,-mx_hole/2,-1]) cube([mx_hole,mx_hole,4]);                // interruptor MX
+  }
+}
+
+module soporte_pantalla() {   // bandeja que aprieta el módulo contra la cara inferior de la cubierta. Origen: centro, base en z=0.
+  difference() {
+    union() {
+      translate([-(disp_mod_l+0.4)/2-2,-(disp_mod_w+0.4)/2-2,0]) cube([disp_mod_l+0.4+4,disp_mod_w+0.4+4,tray_h]);
+      // orejas con agujero M2 (los tornillos suben desde abajo hasta los postes de la carcasa)
+      for (sg=[-1,1]) translate([sg*disp_post_x,0,0]) hull() {
+        cylinder(d=7,h=ear_t,$fn=28);
+        translate([-sg*3.5,0,0]) cylinder(d=7,h=ear_t,$fn=28);
+      }
+    }
+    translate([-(disp_mod_l+0.4)/2,-(disp_mod_w+0.4)/2,tray_floor]) cube([disp_mod_l+0.4,disp_mod_w+0.4,disp_t+1]);   // alojamiento del módulo
+    translate([-(disp_mod_l+0.4)/2-0.01,-(disp_mod_w-4)/2,-1]) cube([14,disp_mod_w-4,tray_floor+2]);               // paso de la regleta de pines (lado izquierdo)
+    for (sg=[-1,1]) translate([sg*disp_post_x,0,-1]) cylinder(d=2.2,h=ear_t+2,$fn=20);                           // M2
   }
 }
 
@@ -187,6 +245,10 @@ module test_ajuste() {
     for (p=fix_holes)  translate([-cell_L/2+p,0,-1]) cylinder(d=5.4,h=5,$fn=28);   // M5 (extremo fijo)
     for (p=free_holes) translate([ cell_L/2-p,0,-1]) cylinder(d=4.4,h=5,$fn=28);   // M4 (extremo libre)
   }
+  // C) marcos de comprobación: deja caer el módulo de pantalla, el ESP32 y el HX711 y mira si entran con holgura
+  translate([-60,25,0]) difference() { cube([disp_mod_l+4.4,disp_mod_w+4.4,5]); translate([2,2,1.5]) cube([disp_mod_l+0.4,disp_mod_w+0.4,5]); }
+  translate([-8,25,0])  difference() { cube([hx_l+4.4,hx_w+4.4,5]);  translate([2,2,1.5]) cube([hx_l+0.4,hx_w+0.4,5]); }
+  translate([-60,52,0]) difference() { cube([esp_l+4.4,esp_w+4.4,5]); translate([2,2,1.5]) cube([esp_l+0.4,esp_w+0.4,5]); }
 }
 
 module vista() {
@@ -195,6 +257,7 @@ module vista() {
   celda_en_z();
   color("#8a8f96") translate([0,cy,zc+cell_h]) rotate(cell_angle) separador();
   color("#1a1a1a") translate([0,0,base_t]) panel();
+  color("#c9a227") translate([0,yc,base_t+H-deck-tray_h]) soporte_pantalla();
   color("#f2efe6") translate([0,cy,zp]) { plataforma(); tapa(); }
   color("#d62d2d") translate([0,cy,zp]) nervios();
   color("#f5c518") translate([enc_x,-D/2+panel_d/2+pared,base_t+H]) pomo();
@@ -208,6 +271,7 @@ else if (pieza=="tapa") tapa();
 else if (pieza=="nervios") nervios();
 else if (pieza=="separador") separador();
 else if (pieza=="panel") panel();
+else if (pieza=="soporte_pantalla") soporte_pantalla();
 else if (pieza=="pomo") pomo();
 else if (pieza=="boton") boton();
 else if (pieza=="test_ajuste") test_ajuste();
