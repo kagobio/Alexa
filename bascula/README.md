@@ -7,7 +7,7 @@ de Aaron Broom (hardware, guía de montaje) y [todayicreated/water-tracker](http
 | --- | --- |
 | `bascula.scad`, `preview.png` | Boceto v1 (varias celdas, pantalla redonda). Descartado. |
 | `bascula_v2.scad`, `preview_v2.png` | Boceto v2: distribución del Water Tracker. |
-| `img/` (conjunto, vista superior, controles, despiezado, interior y piezas), `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
+| `img/` (conjunto, vista superior, controles, anatomía, interior con cables, esquema de conexiones, despiezado y piezas), `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
 | `bascula_v3.scad` | **Actual (v3.1)**: montaje con una celda de barra (extremo fijo a la base, extremo libre a la plataforma). 152 × 188 mm, plataforma útil ~142 × 142 mm, para el Hario V60 Termo 800 ml. |
 | `firmware/CoffeeScale/` | Firmware con temporizador y modos de café. Ver su README. |
 
@@ -90,6 +90,13 @@ La altura de la carcasa ahora se calcula (27,2 mm) para que la tapa quede a ras 
 - **Panel en cápsula** con 6 mm de marco blanco alrededor; el pomo y el botón quedan concéntricos con los extremos de la cápsula, como en el Water Tracker.
 - **Nervios en forma de píldora** (11, de distintas longitudes, con los dos puntos de las esquinas) y cantos suavizados; antes eran bloques cortados en bisel contra el borde.
 - 36 parejas de piezas sin solape (volumen medido < 0,01 mm³).
+
+## Anatomía y conexiones
+- `img/anatomia_v3.png`: despiezado numerado de **todas** las piezas, impresas y no impresas (celda, ESP32, HX711, pantalla, y la batería opcional en naranja).
+- `img/interior_cables_v3.png`: interior con las placas, la celda, la pantalla, el encoder, el interruptor y **los cables** (recorrido orientativo) más el USB-C trasero.
+- `img/esquema_conexiones_v3.png`: esquema con los pines reales del firmware (GPIO, 3,3 V, GND, 5 V).
+- **Alimentación y batería:** el diseño actual funciona con **5 V por USB-C** y no lleva batería. La batería (LiPo 1S + módulo de carga y elevador a 5 V) aparece como **opción marcada en naranja**: no tiene soporte impreso, no hay abertura para su carga y el firmware no mide su nivel. En la vista de interior cabe entre los nidos del HX711 y del ESP32.
+- Los cables y la batería de las imágenes son piezas de ejemplo para entender la disposición, no están en `bascula_v3.scad`.
 
 ## Antes de imprimir todo: `test_ajuste`
 `pieza = "test_ajuste"` (o `stl/test_ajuste.stl`) es una placa pequeña (~143 × 74 mm, 3 mm) de unos 15–20 min de impresión:
