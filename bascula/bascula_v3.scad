@@ -55,24 +55,29 @@ module base() {
     for (p=screw_pts()) translate([p[0],p[1],-1]) cylinder(d=3,h=base_t+2,$fn=24);
   }
 }
-function screw_pts() = [[-(W/2-6),-(D/2-6)],[ (W/2-6),-(D/2-6)],
-                        [-(W/2-6),0],[ (W/2-6),0],
-                        [-(W/2-6),(D/2-6)],[ (W/2-6),(D/2-6)]];
+// Postes para 6 tornillos BT2.6: 4 en las esquinas (hacia dentro, sin salirse de la pared redondeada) y 2 en los lados.
+// Quedan pegados a la pared interior (solapan ~1 mm) y su altura no llega a la plataforma (post_h).
+post_d = 8; post_h = 16;
+function screw_pts() = [[-(W/2-8.06),-(D/2-8.06)],[ (W/2-8.06),-(D/2-8.06)],
+                        [-(W/2-5.6),0],[ (W/2-5.6),0],
+                        [-(W/2-8.06),(D/2-8.06)],[ (W/2-8.06),(D/2-8.06)]];
 
 module carcasa() {   // marco con cubierta en el frente (panel de control); ventana trasera para la plataforma
   difference() {
-    rrect(W,D,H,R);
-    translate([0,0,-1]) rrect(W-2*pared,D-2*pared,H-deck+1,R-pared);        // cavidad
-    translate([0,cy,H-deck-1]) rrect(plat_w+2*gap,plat_d+2*gap,deck+2,10);  // ventana plataforma
-    // bolsillo del panel negro
-    translate([0,-D/2+panel_d/2+pared,H-2]) rrect(W-2*pared-1,panel_d,3,R-pared);
-    // USB-C trasero
-    translate([0,D/2,12]) cube([10,2*pared+2,4],center=true);
-  }
-  // postes para los 6 tornillos BT2.6 (agujero guía d2.2)
-  for (p=screw_pts()) translate([p[0],p[1],0]) difference() {
-    cylinder(d=7,h=H-deck,$fn=24);
-    translate([0,0,-1]) cylinder(d=2.2,h=H,$fn=20);
+    union() {
+      difference() {
+        rrect(W,D,H,R);
+        translate([0,0,-1]) rrect(W-2*pared,D-2*pared,H-deck+1,R-pared);        // cavidad
+        translate([0,cy,H-deck-1]) rrect(plat_w+2*gap,plat_d+2*gap,deck+2,10);  // ventana plataforma
+        // bolsillo del panel negro
+        translate([0,-D/2+panel_d/2+pared,H-2]) rrect(W-2*pared-1,panel_d,3,R-pared);
+        // USB-C trasero
+        translate([0,D/2,12]) cube([10,2*pared+2,4],center=true);
+      }
+      for (p=screw_pts()) translate([p[0],p[1],0]) cylinder(d=post_d,h=post_h,$fn=28);
+    }
+    // agujero guía d2.2 en cada poste (también atraviesa la pared donde se solapan)
+    for (p=screw_pts()) translate([p[0],p[1],-1]) cylinder(d=2.2,h=post_h+1,$fn=20);
   }
 }
 
@@ -103,9 +108,9 @@ module tapa() {
 }
 module nervios() {
   intersection() {
-    translate([0,0,plat_t+2]) rrect(plat_w-8,plat_d-8,nervio_h,8);
-    for (i=[-8:8]) translate([0,0,plat_t+2]) rotate(-45) translate([i*paso,0,0])
-      linear_extrude(nervio_h) offset(nervio_w/2) square([0.01,220-abs(i)*12],center=true);
+    translate([0,0,plat_t+2-0.02]) rrect(plat_w-8,plat_d-8,nervio_h+0.02,8);
+    for (i=[-8:8]) translate([0,0,plat_t+2-0.02]) rotate(-45) translate([i*paso,0,0])
+      linear_extrude(nervio_h+0.02) offset(nervio_w/2) square([0.01,220-abs(i)*12],center=true);
   }
 }
 module pomo()  { cylinder(d=pomo_d,h=12,$fn=24); }
