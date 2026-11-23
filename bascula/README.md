@@ -7,7 +7,7 @@ de Aaron Broom (hardware, guía de montaje) y [todayicreated/water-tracker](http
 | --- | --- |
 | `bascula.scad`, `preview.png` | Boceto v1 (varias celdas, pantalla redonda). Descartado. |
 | `bascula_v2.scad`, `preview_v2.png` | Boceto v2: distribución del Water Tracker. |
-| `preview_v3.png`, `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
+| `img/` (conjunto, despiezado, interior y piezas de la v3), `stl/` | Vista del conjunto v3 y las 8 piezas exportadas a STL (base, carcasa, plataforma, tapa, nervios, panel, pomo, botón). |
 | `bascula_v3.scad` | **Actual**: montaje con una celda de barra (extremo fijo a la base, extremo libre a la plataforma). 152 × 188 mm, plataforma útil ~142 × 142 mm, para el Hario V60 Termo 800 ml. |
 | `firmware/CoffeeScale/` | Firmware con temporizador y modos de café. Ver su README. |
 

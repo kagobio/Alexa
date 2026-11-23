@@ -84,7 +84,7 @@ module carcasa() {   // marco con cubierta en el frente (panel de control); vent
 module panel() {     // inserto negro del frente
   translate([0,-D/2+panel_d/2+pared,H-2]) difference() {
     rrect(W-2*pared-1.4,panel_d-0.4,2,R-pared);
-    translate([0,0,-1]) cube([disp_w,disp_h,4],center=true);
+    translate([0,0,1]) cube([disp_w,disp_h,4],center=true);   // ventana de la pantalla (atraviesa todo el grosor)
     translate([-(W/2-pared-pomo_d/2-6),0,-1]) cylinder(d=7.5,h=4,$fn=32);
     translate([ (W/2-pared-boton_d/2-8),0,-1]) cylinder(d=boton_d-3,h=4,$fn=32);
   }
