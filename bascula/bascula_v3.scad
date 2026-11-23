@@ -4,7 +4,9 @@
 pieza = "todo"; // base | carcasa | plataforma | tapa | nervios | panel | pomo | boton | todo
 
 // --- Carcasa ---
-W = 120; D = 170; R = 14;
+// Dimensionada para el Hario V60 Termo acero inox. 800 ml (cuerpo ~135 mm; 182 x 135 x 172 mm con asa).
+// Plataforma útil ~142 x 142 mm: la base del servidor cabe entera con margen.
+W = 152; D = 188; R = 14;
 base_t = 3;            // espesor de la base
 H = 26;                // altura de la carcasa (sobre la base)
 pared = 2.4; deck = 3; // pared y espesor de la cubierta frontal
@@ -14,7 +16,7 @@ panel_d = 38;          // fondo de la franja de control
 cell_L = 80; cell_w = 12.7; cell_h = 12.7;
 fix_h1 = 6;  fix_h2 = 21;    // posición de los 2 taladros M5 (extremo fijo), desde ese extremo
 free_h = 6;                  // taladros M4 del extremo libre: distancia al extremo libre
-cell_angle = 25;             // giro de la celda dentro de la caja (grados)
+cell_angle = 45;             // giro de la celda dentro de la caja (grados); comprobado que cabe con W=152, D=188
 boss = 4;                    // altura del soporte bajo el extremo fijo (da holgura al libre)
 spacer = 3;                  // separador entre celda (extremo libre) y plataforma
 
@@ -29,6 +31,7 @@ cy = panel_d/2;              // centro de la plataforma en Y (la franja de contr
 disp_w = 36; disp_h = 19;    // ventana de la pantalla 1.47" (confirma con tu módulo)
 pomo_d = 26; boton_d = 15;
 nervio_w = 8; nervio_h = 2; paso = 19;
+lip_h = 2;                   // borde bajo contra salpicaduras en el perímetro de la tapa
 
 module rrect(w,d,h,r){ linear_extrude(h) offset(r) square([w-2*r,d-2*r],center=true); }
 
@@ -88,7 +91,16 @@ module plataforma() { // se atornilla al extremo libre de la celda con 2 M4
     translate([0,0,-1]) cylinder(d=4.4,h=plat_t+2,$fn=24);
   }
 }
-module tapa()    { translate([0,0,plat_t]) rrect(plat_w-0.6,plat_d-0.6,2,9); }
+module tapa() {
+  translate([0,0,plat_t]) {
+    rrect(plat_w-0.6,plat_d-0.6,2,9);
+    // borde perimetral: retiene el agua que cae fuera del filtro (no estorba: la base del servidor queda dentro)
+    difference() {
+      rrect(plat_w-0.6,plat_d-0.6,2+lip_h,9);
+      translate([0,0,2]) rrect(plat_w-0.6-4,plat_d-0.6-4,lip_h+1,7);
+    }
+  }
+}
 module nervios() {
   intersection() {
     translate([0,0,plat_t+2]) rrect(plat_w-8,plat_d-8,nervio_h,8);

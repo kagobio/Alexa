@@ -7,7 +7,7 @@ de Aaron Broom (hardware, guía de montaje) y [todayicreated/water-tracker](http
 | --- | --- |
 | `bascula.scad`, `preview.png` | Boceto v1 (varias celdas, pantalla redonda). Descartado. |
 | `bascula_v2.scad`, `preview_v2.png` | Boceto v2: distribución del Water Tracker. |
-| `bascula_v3.scad` | **Actual**: montaje con una celda de barra (extremo fijo a la base, extremo libre a la plataforma). |
+| `bascula_v3.scad` | **Actual**: montaje con una celda de barra (extremo fijo a la base, extremo libre a la plataforma). 152 × 188 mm, plataforma útil ~142 × 142 mm, para el Hario V60 Termo 800 ml. |
 | `firmware/CoffeeScale/` | Firmware con temporizador y modos de café. Ver su README. |
 
 > `bascula_v3.scad` y el firmware **no se han compilado ni probado**.
@@ -37,3 +37,14 @@ ESP32-WROOM-32D · HX711 + celda de 5 kg (o la tuya) · pantalla 1.47" 172×320 
 encoder con pulsador · interruptor MX low profile (botón azul) · conector USB-C hembra ·
 tornillos 2×M5×12, 2×M4×12, 6×BT2.6×8, 2×M2×4, 4×M2×8. Los LEDs WS2812 son opcionales y mi
 firmware no los usa.
+
+## Tamaño para V60 (Hario V60 Termo acero inox. 800 ml, negro)
+Medidas oficiales de Hario: 182 × 135 × 172 mm (ancho con asa × fondo × alto), unos 600–790 g vacío según la fuente.
+No encontré el diámetro exacto de la base. La plataforma útil es de ~142 × 142 mm para que el cuerpo (~135 mm) quepa
+entera. Con el servidor lleno (~0,8 kg de café + ~0,7 kg de servidor + dripper) el peso queda muy por debajo de los 5 kg de la celda.
+- El servidor es de doble pared: la base no se calienta, así que el PETG no sufre.
+- La tapa lleva un borde de 2 mm contra salpicaduras (`lip_h`).
+- Mide la base de tu servidor y, si es mayor de 135 mm o quieres más margen, sube `W` y `D` en `bascula_v3.scad`
+  (la plataforma es `W - 9.8` y `D - 45.8`); comprueba que la celda sigue cabiendo si cambias `cell_angle`.
+- Corrección: en la v3 anterior (120 × 170 mm, celda a 25°) el extremo fijo de la celda quedaba fuera de la carcasa. Con estos valores cabe.
+- Sin compilar: `bascula_v3.scad` sigue sin probarse en OpenSCAD.
