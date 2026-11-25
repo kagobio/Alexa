@@ -27,6 +27,8 @@ constexpr int TFT_BL = 22;
 constexpr int ENC_A = 33, ENC_B = 32, ENC_SW = 19, BTN_PIN = 21;
 constexpr int HX_DT = 16, HX_SCK = 17;
 constexpr int HX_RATE = 4;   // Opcional: pin RATE del HX711 (80 SPS). Ver README.
+constexpr int BAT_ADC = 35;  // Bateria: divisor 100k/100k desde B+ a GPIO35 (ADC1, solo entrada). Ver README.
+constexpr float BAT_DIV = 2.0f;   // relacion del divisor (Vbat = Vpin x 2). Ajustala si mides otra tension con un polimetro.
 
 // ---------- Colores RGB565 ----------
 constexpr uint16_t BLACK = 0x0000, WHITE = 0xFFFF, GREY = 0x7BEF, DARKGREY = 0x2104,
@@ -130,13 +132,16 @@ bool targetCue = false, doneInWindow = false;
 uint32_t modeChangedMs = 0, tareMs = 0, doneMs = 0, targetCueMs = 0, secMs = 0, lastActivityMs = 0;
 int lastSecShown = -1; float fracShown = 0;
 bool dimmed = false;
+// Bateria LiPo 1S (opcional): se mide por un divisor en GPIO35. Si no hay nada conectado (< 2,5 V) el icono no se muestra.
+float batV = 0, batMarkV = 0; int batPct = 0; bool batPresent = false, batCharging = false, batLowSent = false, batHaveV = false;
+uint32_t batLastMs = 0, batMarkMs = 0;
 uint32_t startMs = 0, endMs = 0, lastFlowMs = 0, riseAt = 0, reachedAt = 0, lastDraw = 0, toastUntil = 0;
 bool rising = false;
 float finalWeight = 0;
 String toast;
 int menuRow = 0, knownMass = 100;
 float draft = 0, calEmpty = 0;
-constexpr int MENU_ROWS = 11; // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Avisos movil, Wi-Fi, Codigo, Calibrar, Volver
+constexpr int MENU_ROWS = 12; // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Avisos movil, Wi-Fi, Codigo, Calibrar, Volver
 
 const ModeDef &curDef() { return MODES[saved.mode]; }
 ModeCfg &curCfg() { return saved.m[saved.mode]; }
@@ -152,7 +157,43 @@ constexpr uint8_t BL_FULL = 255, BL_DIM = 40;
 float lastActW = 0;
 void setBacklight(uint8_t duty) { ledcWrite(TFT_BL, duty); }
 void activity(uint32_t now) { lastActivityMs = now; if (dimmed) { dimmed = false; setBacklight(BL_FULL); } }
-void showToast(const String &s, uint32_t ms = 2000) { toast = s; toastUntil = millis() + ms; dirty = true; }
+// Curva aproximada de descarga de una LiPo 1S en reposo (tension -> %). Orientativa: depende de la celda y de la carga.
+int lipoPercent(float v) {
+  static const float V[] = {4.20f, 4.10f, 4.00f, 3.92f, 3.85f, 3.80f, 3.75f, 3.70f, 3.65f, 3.55f, 3.45f, 3.30f};
+  static const int   P[] = {100,   90,    80,    70,    60,    50,    40,    30,    20,    10,    5,     0};
+  if (v >= V[0]) return 100;
+  for (int i = 1; i < 12; i++) if (v >= V[i]) return int(P[i] + (P[i-1] - P[i]) * (v - V[i]) / (V[i-1] - V[i]) + 0.5f);
+  return 0;
+}
+void showToast(const String &s, uint32_t ms = 2000);
+void queueNote(const char *title, const char *body);
+// Lee la bateria cada 2 s (media de 16 lecturas, filtrada). Marca "cargando" si la tension sube >= 15 mV en 30 s.
+void readBattery(uint32_t now) {
+  if (batLastMs && now - batLastMs < 2000) return;
+  batLastMs = now;
+  uint32_t sum = 0; for (int i = 0; i < 16; i++) sum += analogReadMilliVolts(BAT_ADC);
+  float v = sum / 16.0f / 1000.0f * BAT_DIV;
+  batPresent = v > 2.5f && v < 4.6f;
+  if (!batPresent) { batHaveV = false; batCharging = false; return; }
+  batV = batHaveV ? batV + 0.3f * (v - batV) : v; batHaveV = true;
+  batPct = lipoPercent(batV);
+  if (!batMarkMs) { batMarkMs = now; batMarkV = batV; }
+  if (now - batMarkMs >= 30000) {
+    float dv = batV - batMarkV;
+    if (dv >= 0.015f) batCharging = true; else if (dv <= -0.005f) batCharging = false;
+    if (batV >= 4.18f && dv < 0.015f) batCharging = false;     // llena y estable
+    batMarkMs = now; batMarkV = batV;
+  }
+  // avisos: una vez por descarga, por debajo del 15 %
+  if (batPct <= 15 && !batCharging && !batLowSent) {
+    batLowSent = true;
+    if (state == READY || state == DONE) showToast("Bateria baja", 3000);
+    char b[48]; snprintf(b, sizeof b, "%d %% (%.2f V). Conecta el cargador.", batPct, batV);
+    queueNote("Bateria baja", b);
+  }
+  if (batPct >= 25 || batCharging) batLowSent = false;
+}
+void showToast(const String &s, uint32_t ms) { toast = s; toastUntil = millis() + ms; dirty = true; }
 
 // ---------- Lectura de peso ----------
 bool readScale(uint32_t now) {
@@ -331,6 +372,20 @@ struct Bubble { float x, y, r, ph; bool on; };
 Bubble bubbles[9];
 uint32_t nextBubbleMs = 0, lastFrameMs = 0;
 
+// Icono de bateria (arriba a la derecha): verde > 30 %, naranja 15-30 %, rojo < 15 % (parpadea por debajo del 10 %). Rayo si carga.
+void drawBattery(int x, int y, uint32_t now) {
+  if (!batPresent) return;
+  uint16_t col = batPct > 30 ? GREEN : batPct > 15 ? 0xFD20 : RED;
+  bool blink = batPct <= 10 && !batCharging && ((now / 500) & 1);
+  if (!blink) {
+    cv.drawRoundRect(x, y, 28, 12, 2, col); cv.fillRect(x + 28, y + 3, 2, 6, col);
+    int w = constrain((batPct * 24) / 100, 0, 24);
+    if (w > 0) cv.fillRect(x + 2, y + 2, w, 8, col);
+  }
+  if (batCharging) { cv.drawLine(x + 16, y + 1, x + 11, y + 6, WHITE); cv.drawLine(x + 11, y + 6, x + 17, y + 6, WHITE); cv.drawLine(x + 17, y + 6, x + 12, y + 11, WHITE); }
+  char b[8]; snprintf(b, sizeof b, "%d%%", batPct);
+  txt(b, x - 5, y - 1, TrackerSansRegular12, TXT_DIM, TR_DATUM);
+}
 // Pantalla: negro, tiempo grande, peso, y un nivel de cafe que sube con una onda suave.
 void drawMain(uint32_t now) {
   const ModeDef &d = curDef(); ModeCfg &c = curCfg();
@@ -373,8 +428,9 @@ void drawMain(uint32_t now) {
   if (target > 0) {
     char b[48];
     snprintf(b, sizeof b, "%.0f > %.0f g   %s-%s", c.dose, target, fmtT(c.tMin).c_str(), fmtT(c.tMax).c_str());
-    txt(b, 306, 11, TrackerSansRegular12, TXT_DIM, TR_DATUM);
+    txt(b, batPresent ? 262 : 306, 11, TrackerSansRegular12, TXT_DIM, TR_DATUM);
   }
+  drawBattery(270, 9, now);
 
   // ---- tiempo grande (salta 3 px cada segundo) ----
   uint32_t ms = running ? now - startMs : state == DONE ? endMs - startMs : 0;
@@ -405,7 +461,8 @@ void drawMain(uint32_t now) {
   if (right.length()) txt(right, 306, 134, TrackerSansBold15, TXT_RIGHT, TR_DATUM);
   // pista discreta solo cuando hace falta
   if (state == READY) {
-    if (saved.cpg == 0) txt("Sin calibrar: azul largo > Ajustes", 160, 152, TrackerSansRegular12, RED, TC_DATUM);
+    if (batPresent && batPct <= 5 && !batCharging) txt("Bateria critica: conecta el cargador", 160, 152, TrackerSansRegular12, RED, TC_DATUM);
+    else if (saved.cpg == 0) txt("Sin calibrar: azul largo > Ajustes", 160, 152, TrackerSansRegular12, RED, TC_DATUM);
     else if (!armed) txt("pomo: tara", 160, 154, TrackerSansRegular12, TXT_DIMMER, TC_DATUM);
     else { cv.fillCircle(160, 18, 3, c.autoStart ? GREEN : GREY); }
     if (!armed) cv.drawCircle(160, 18, 3, GREY);
@@ -434,7 +491,8 @@ String menuLabel(int r) {
     case 6: return "Avisos movil";
     case 7: return "Wi-Fi";
     case 8: return "Codigo";
-    case 9: return "Calibrar";
+    case 9: return "Bateria";
+    case 10: return "Calibrar";
     default: return "Volver";
   }
 }
@@ -451,6 +509,7 @@ String menuValue(int r) {
     case 6: return saved.notify ? "SI" : "NO";
     case 7: return WiFi.status() == WL_CONNECTED ? "conectado" : "sin red";
     case 8: return String(saved.topic);
+    case 9: { if (!batPresent) return "sin bateria"; snprintf(b, sizeof b, "%d%% %.2fV", batPct, batV); return b; }
     default: return "";
   }
 }
@@ -542,7 +601,8 @@ void handleInput(uint32_t now) {
                                  if (saved.notify && WiFi.SSID().length() == 0) showToast("Falta configurar el Wi-Fi", 2500); }
         else if (menuRow == 7) runWifiPortal();
         else if (menuRow == 8) showToast(String("ntfy: ") + saved.topic, 5000);
-        else if (menuRow == 9) state = CAL_EMPTY;
+        else if (menuRow == 9) { /* solo informacion */ }
+        else if (menuRow == 10) state = CAL_EMPTY;
         else resetToReady();
       }
       break;
@@ -600,6 +660,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_A), encoderISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_B), encoderISR, CHANGE);
 
+  analogSetPinAttenuation(BAT_ADC, ADC_11db);   // rango hasta ~3,1 V en el pin (la bateria a 4,2 V llega como 2,1 V)
   ledcAttach(TFT_BL, 5000, 8); setBacklight(0);
   delay(150);
   tft.init(); tft.setRotation(3); // Horizontal, girada 180 grados (igual que el Water Tracker).
@@ -647,6 +708,7 @@ void loop() {
   if (readScale(now)) updateWeight(now);
   handleInput(now);
   brewLogic(now);
+  readBattery(now);
   if (state != READY) lastActivityMs = now;                       // preparando, terminado o en menus: no se atenua
   if (state == READY && !dimmed && now - lastActivityMs > DIM_AFTER_MS) { dimmed = true; setBacklight(BL_DIM); }
   bool animate = state <= DONE;

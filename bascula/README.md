@@ -95,8 +95,16 @@ La altura de la carcasa ahora se calcula (27,2 mm) para que la tapa quede a ras 
 - `img/anatomia_v3.png`: despiezado numerado de **todas** las piezas, impresas y no impresas (celda, ESP32, HX711, pantalla, y la batería opcional en naranja).
 - `img/interior_cables_v3.png`: interior con las placas, la celda, la pantalla, el encoder, el interruptor y **los cables** (recorrido orientativo) más el USB-C trasero.
 - `img/esquema_conexiones_v3.png`: esquema con los pines reales del firmware (GPIO, 3,3 V, GND, 5 V).
-- **Alimentación y batería:** el diseño actual funciona con **5 V por USB-C** y no lleva batería. La batería (LiPo 1S + módulo de carga y elevador a 5 V) aparece como **opción marcada en naranja**: no tiene soporte impreso, no hay abertura para su carga y el firmware no mide su nivel. En la vista de interior cabe entre los nidos del HX711 y del ESP32.
-- Los cables y la batería de las imágenes son piezas de ejemplo para entender la disposición, no están en `bascula_v3.scad`.
+- **Alimentación y batería:** se puede alimentar por el **USB-C del ESP32** (como antes) o por la **batería** (LiPo 1S + módulo de carga y elevador a 5 V, que entra por VIN). Ver "Batería" más abajo.
+- Los cables y las placas de las imágenes son piezas de ejemplo para entender la disposición, no están en `bascula_v3.scad`; los nidos y las aberturas sí.
+
+## Batería (v3.5)
+- **Nido de la batería** entre los nidos del HX711 y del ESP32 (largo en Y, 50 × 34 × 6 mm estimados: LiPo 1S tipo 603450, 1000 mAh) con **ranuras para brida** a ambos lados.
+- **Nido del módulo de carga + elevador** (36 × 17 × 5 mm estimados) a la derecha del ESP32, compartiendo su pared, con su USB-C hacia la pared trasera: hay una **segunda abertura trasera** (14 × 8 mm) para el cargador. El extremo del módulo queda a ~10 mm de la pared, porque más atrás chocaba con un poste de tornillo; el enchufe entra esa distancia.
+- Se desactiva con `bateria = false` en `bascula_v3.scad`.
+- Medidas estimadas: `bat_l`, `bat_w`, `bat_t`, `mod_l`, `mod_w`, `mod_t`. **Mide las tuyas.**
+- Comprobado sin solapes: 78 parejas de piezas, incluidas la batería, el módulo, el ESP32 y el HX711 de ejemplo dentro de sus nidos.
+- **Seguridad:** usa una celda LiPo **con placa de protección**, no la pinches ni la aprietes, y no la dejes bajo la plataforma en movimiento (el nido la mantiene a 9 mm de altura, lejos de la plataforma). Una LiPo mal protegida puede incendiarse.
 
 ## Antes de imprimir todo: `test_ajuste`
 `pieza = "test_ajuste"` (o `stl/test_ajuste.stl`) es una placa pequeña (~143 × 74 mm, 3 mm) de unos 15–20 min de impresión:

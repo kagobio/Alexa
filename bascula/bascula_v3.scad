@@ -19,6 +19,9 @@ mx_hole  = 14.0;               // hueco del interruptor MX low profile (cuadrado
 cell_L = 80; cell_w = 12.7; cell_h = 12.7;   // celda de barra de 5 kg. MIDE la tuya.
 fix_holes  = [6, 21];          // taladros M5 del extremo FIJO, distancia a ese extremo (mm)
 free_holes = [5, 15];          // taladros M4 del extremo LIBRE, distancia a ese extremo (mm)
+bateria = true;                // true: nidos de la batería y del módulo de carga + abertura de carga
+bat_l = 50; bat_w = 34; bat_t = 6;   // ESTIMADO: LiPo 1S tipo 603450 (1000 mAh): 50 x 34 x 6 mm. MIDE la tuya.
+mod_l = 36; mod_w = 17; mod_t = 5;   // ESTIMADO: módulo de carga + elevador a 5 V (USB-C en un extremo). MIDE el tuyo.
 // ===================================================================================
 
 // --- Carcasa ---
@@ -59,6 +62,11 @@ hx_x = -48; hx_y = 48;                 // HX711: a la izquierda-atrás, largo en
 nest_wall = 2; nest_wh = 4;            // pared y altura extra del nido sobre el apoyo
 esp_usb_z = esp_lift + 1.6 + 1.6;      // altura del centro del conector USB sobre la base (PCB 1,6 + mitad del conector)
 usb_w = 14; usb_h = 8;                 // abertura trasera para el enchufe USB-C
+bat_x = -3.5; bat_y = 62;              // batería: centro, entre los nidos del HX711 y del ESP32 (largo en Y)
+mod_x = esp_x + (esp_w+0.4)/2 + 2 + 0.2 + (mod_w+0.4)/2;   // módulo de carga: a la derecha del ESP32, comparte su pared
+mod_y = 81 - (mod_l+0.4)/2;                                // el extremo trasero queda en y=81: libra el poste de la esquina; el USB-C queda ~10 mm dentro de la abertura
+mod_usb_z = 1 + 1.6 + 1.6;             // centro del conector USB-C del módulo sobre la base (apoyo 1 + PCB 1,6 + medio conector)
+mod_wall = 1.6;                        // más fina que las otras: la esquina trasera de la carcasa es redondeada
 disp_post_x = disp_mod_l/2 + 6.2;      // posición X de los postes de la bandeja (fuera del cuerpo de la bandeja: sin solape)
 tray_floor = 1.5; ear_t = 2.5;
 tray_h = tray_floor + disp_t;          // altura de la bandeja (el módulo queda pegado a la cara inferior de la cubierta)
@@ -114,11 +122,16 @@ module base() {
       // nido del ESP32 (USB hacia la pared trasera) y del HX711
       translate([esp_x,esp_y,base_t]) rotate(90) nest(esp_l+0.4,esp_w+0.4,esp_lift,esp_bar,nest_wall,nest_wh);
       translate([hx_x,hx_y,base_t]) nest(hx_l+0.4,hx_w+0.4,2,hx_w+0.4,nest_wall,nest_wh);
+      if (bateria) {
+        translate([bat_x,bat_y,base_t]) rotate(90) nest(bat_l+0.4,bat_w+0.4,1,bat_w+0.4,nest_wall,bat_t-1);      // batería (paredes de su grosor)
+        translate([mod_x,mod_y,base_t]) rotate(90) nest(mod_l+0.4,mod_w+0.4,1,mod_w+0.4,mod_wall,mod_t);         // módulo de carga
+      }
     }
     // ranuras para bridas (cruzan la placa por encima): ESP32 a ambos lados, HX711 a ambos lados
     for (sg=[-1,1]) {
       translate([esp_x+sg*((esp_w+0.4)/2+nest_wall+1.5)-0.8, esp_y-1.9, -1]) cube([1.6,3.8,base_t+2]);
       translate([hx_x-1.9, hx_y+sg*((hx_w+0.4)/2+nest_wall+1.5)-0.8, -1]) cube([3.8,1.6,base_t+2]);
+      if (bateria) translate([bat_x+sg*((bat_w+0.4)/2+nest_wall+1.5)-0.8, bat_y-1.9, -1]) cube([1.6,3.8,base_t+2]);
     }
     // taladros M5 de la celda, con rebaje por debajo para la cabeza (d9.5 x 1.5)
     cell_frame() for (p=fix_holes) translate([p,0,-foot_h-1]) {
@@ -140,6 +153,7 @@ module carcasa_raw() {   // marco con cubierta en el frente (panel de control); 
         translate([0,cy,H-deck-1]) rrect(plat_w+2*gap,plat_d+2*gap,deck+2,10);  // ventana plataforma
         translate([0,yc,H-2]) rrect(panel_w+0.6,panel_h+0.6,3,(panel_h+0.6)/2-0.01);          // bolsillo del panel (cápsula)
         translate([esp_x,D/2,esp_usb_z]) cube([usb_w,2*pared+2,usb_h],center=true);   // USB-C del ESP32 (trasero)
+        if (bateria) translate([mod_x,D/2,mod_usb_z]) cube([usb_w,2*pared+2,usb_h],center=true);   // USB-C de carga de la batería
         // huecos que atraviesan la cubierta bajo el panel: pantalla, encoder y interruptor
         translate([0,yc,H-4]) rrect(disp_w,disp_h,5,1.5);
         translate([enc_x,yc,H-4]) cylinder(d=enc_hole,h=5,$fn=32);

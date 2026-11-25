@@ -12,6 +12,7 @@ static uint32_t g_ms = 0; uint32_t millis(){ return g_ms; } void delay(uint32_t 
 static int g_pin[64]; int digitalRead(int p){ return g_pin[p]; } void pinMode(int,int){} void digitalWrite(int,int){}
 static void (*g_isr)() = nullptr; void attachInterrupt(int,void(*f)(),int){ g_isr = f; }
 long random(long m){ return rand() % m; }
+static int g_bat_mv = 0; uint32_t analogReadMilliVolts(int){ return g_bat_mv; } void analogSetPinAttenuation(int,int){}
 static int g_bl = -1; void ledcAttach(int,int,int){} void ledcWrite(int,int d){ g_bl = d; }
 SerialT Serial;
 struct Q { int sz; std::vector<std::vector<uint8_t>> items; };
@@ -148,6 +149,35 @@ int main() {
   // --- 6. Cambio de modo anima el nombre
   rotateClick(+1); step(400);
   CHECK(frameHas("Aeropress") || frameHas("Prensa") || frameHas("Libre") || frameHas("Espresso") || frameHas("V60"), "dibuja el nombre del modo");
+
+  // --- 7. Bateria
+  printf("7) Bateria\n");
+  if (state == DONE) press(BTN_PIN, 60);                    // DONE -> READY
+  CHECK(state == READY, "en espera antes de probar la bateria (state=%d)", (int)state);
+  g_weight = 0; step(4000);
+  CHECK(!batPresent, "sin bateria conectada: icono oculto");
+  CHECK(!frameHas("%"), "no se dibuja ningun porcentaje sin bateria");
+  g_bat_mv = 1950; step(7000);                              // 3,90 V
+  CHECK(batPresent && batPct >= 60 && batPct <= 75, "3,90 V -> %d %%", batPct);
+  step(200); CHECK(frameHas("%"), "el icono muestra el porcentaje");
+  press(BTN_PIN, 1000);                                     // menu
+  for (int i = 0; i < 9; i++) rotateClick(+1);
+  step(300);
+  CHECK(menuRow == 9 && frameHas("Bateria"), "fila Bateria en el menu (row=%d)", menuRow);
+  CHECK(frameHas("V") , "la fila muestra la tension");
+  press(BTN_PIN, 60);
+  int nb = notes();
+  g_bat_mv = 1760; step(25000);                             // ~3,52 V -> ~8 %
+  CHECK(batPct <= 15, "bateria baja (%d %%)", batPct);
+  CHECK(notes() == nb + 1 && strstr(lastNote().title, "Bateria baja"), "aviso movil de bateria baja (notas +%d)", notes() - nb);
+  printf("   aviso: \"%s\" / \"%s\"\n", lastNote().title, lastNote().body);
+  step(40000); CHECK(notes() == nb + 1, "el aviso no se repite");
+  g_bat_mv = 1800; step(35000); g_bat_mv = 1830; step(35000); g_bat_mv = 1860; step(35000);   // sube: cargando
+  CHECK(batCharging, "detecta la carga (V=%.2f)", batV);
+  g_bat_mv = 2100; step(60000);
+  CHECK(batPct == 100 || batPct >= 98, "bateria llena (%d %%)", batPct);
+  g_bat_mv = 0; step(8000);
+  CHECK(!batPresent, "al desconectar la bateria el icono desaparece");
 
   printf("\n%d comprobaciones, %d fallos, %d fotogramas dibujados\n", checks, fails, g_frames);
   return fails ? 1 : 0;

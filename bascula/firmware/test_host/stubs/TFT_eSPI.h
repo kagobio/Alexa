@@ -25,4 +25,5 @@ struct TFT_eSprite {
   void fillCircle(int,int,int,uint16_t){} void drawCircle(int,int,int,uint16_t){}
   void fillRoundRect(int,int,int,int,int,uint16_t){} void drawRoundRect(int,int,int,int,int,uint16_t){}
   void drawFastVLine(int,int,int,uint16_t){} void drawPixel(int,int,uint16_t){}
+  void fillRect(int,int,int,int,uint16_t){} void drawLine(int,int,int,int,uint16_t){}
 };

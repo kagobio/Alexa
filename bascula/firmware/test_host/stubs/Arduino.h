@@ -23,6 +23,8 @@ inline int digitalPinToInterrupt(int p){return p;}
 void attachInterrupt(int,void(*)(),int);
 long random(long m);
 void ledcAttach(int,int,int); void ledcWrite(int,int);
+uint32_t analogReadMilliVolts(int); void analogSetPinAttenuation(int,int);
+#define ADC_11db 3
 struct String {
   std::string s;
   String(){} String(const char*c):s(c){} String(int v):s(std::to_string(v)){} String(unsigned v):s(std::to_string(v)){}

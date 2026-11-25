@@ -103,7 +103,7 @@ mientras fluye. Verde dentro de la ventana de tiempo, rojo si se pasa. Detalles:
 
 ## Prueba en el servidor (sin placa)
 `firmware/test_host/run.sh` compila **el firmware real** contra piezas falsas de Arduino (pantalla, HX711, Wi-Fi, memoria, colas) y lo ejecuta
-con un café simulado. Comprueba (32 comprobaciones, hoy 0 fallos, también con AddressSanitizer/UBSan):
+con un café simulado. Comprueba (45 comprobaciones, hoy 0 fallos, también con AddressSanitizer/UBSan):
 - tara y arranque automático; espresso parado al peso (22 s, 35,9 g, ratio 1:2,0, un aviso al móvil);
 - V60: al llegar a 240 g el reloj **sigue**, avisa "objetivo alcanzado" y solo se para con el botón azul;
 - modo "sin goteo": para solo a los 8 s sin caudal tras el objetivo;
@@ -111,3 +111,15 @@ con un café simulado. Comprueba (32 comprobaciones, hoy 0 fallos, también con 
 
 Esto **valida la lógica, no el hardware**: no prueba el HX711, el ST7789, el Wi-Fi ni la velocidad real del ESP32, y no comprueba que las librerías reales de Arduino compilen
 (las piezas falsas son más permisivas). Sigue pendiente compilarlo con el Arduino IDE y probarlo en la placa. El `.ino` usa `ledcAttach`/`ledcWrite` (core ESP32 3.x).
+
+## Batería (opcional)
+Si conectas una LiPo, la pantalla muestra un **icono con el porcentaje** arriba a la derecha (verde > 30 %, naranja 15–30 %, rojo < 15 % y parpadeando por debajo del 10 %),
+un rayo si detecta que carga, y en **Ajustes → Bateria** el porcentaje y la tensión. Si no hay batería (< 2,5 V en el pin) el icono no aparece.
+- **Medida:** divisor 100 kΩ / 100 kΩ desde B+ al **GPIO35** (ADC1, solo entrada) y 100 nF a masa; `Vbat = 2 × Vpin` (`BAT_DIV`). Media de 16 lecturas cada 2 s con filtro.
+- **Porcentaje:** curva de descarga de una LiPo en reposo (4,20 V = 100 %, 3,70 V = 30 %, 3,30 V = 0 %). Es **orientativa**: con carga o con la celda fría varía.
+- **Carga:** se deduce porque la tensión sube ≥ 15 mV en 30 s (no se lee el pin de estado del módulo de carga). Puede tardar en detectarla y fallar con módulos que cortan la carga.
+- **Avisos:** por debajo del 15 % sin carga, una vez por descarga: aviso en pantalla y, si están activados, **al móvil** ("Bateria baja"). Por debajo del 5 %: "Bateria critica" fija en espera.
+- **Ajuste fino:** mide la tensión real con un polímetro y compárala con la de Ajustes → Bateria; si difieren, corrige `BAT_DIV`. El ADC del ESP32 no es lineal en los extremos.
+- La batería **no afecta a la báscula**: el HX711 sigue alimentándose del 3,3 V del ESP32. Con la radio Wi-Fi activa el consumo sube y la autonomía baja.
+- Módulos con **IP5306** y similares pueden **apagar la salida** si el consumo es bajo (< ~50 mA); la pantalla atenuada y el ESP32 sin Wi-Fi quedan cerca de ese límite. Si se apaga solo, usa TP4056 + elevador.
+- `firmware/test_host/run.sh` incluye ahora la batería: **45 comprobaciones, 0 fallos** (sin batería, 3,90 V, menú, batería baja con un solo aviso, carga, llena y desconexión). Sigue sin probarse en la placa.
