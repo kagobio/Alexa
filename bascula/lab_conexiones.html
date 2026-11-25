@@ -47,6 +47,19 @@
     .board { box-shadow:none; text-align:center; } .board svg { height: 250mm; width:auto; margin:0 auto; }
     #plan { display:block !important; break-before: page; } #plan .card { box-shadow:none; padding:0; } #plan tr { break-inside: avoid; }
   }
+
+  .gbtn { background:#6c3fd1 !important; color:#fff !important; border-color:#6c3fd1 !important; }
+  #game { display:none; margin-top:14px; border:2px solid #6c3fd1; } #game.on { display:block; }
+  #game .top { display:flex; gap:14px; flex-wrap:wrap; align-items:center; font-size:15px; }
+  #game .stat { background:#f3eefc; border-radius:10px; padding:4px 10px; font-weight:700; } #game .stat small { font-weight:400; color:#666; }
+  #game .lv { display:flex; gap:8px; margin:10px 0; flex-wrap:wrap; }
+  #game .lvb { flex:1 1 150px; border:2px solid #ddd; border-radius:10px; padding:6px 8px; font-size:13px; background:#fafafa; } #game .lvb.cur { border-color:#6c3fd1; background:#f3eefc; } #game .lvb.done { border-color:#1f9d55; background:#eaf7ef; }
+  #game .bar2 { height:6px; background:#e5e5e5; border-radius:3px; margin-top:4px; overflow:hidden; } #game .bar2 i { display:block; height:100%; background:#6c3fd1; transition:width .3s; }
+  #game .mis { padding:5px 0; border-bottom:1px solid #eee; font-size:14px; } #game .mis.ok { color:#1f9d55; text-decoration:line-through; opacity:.75; }
+  #toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:#222; color:#fff; padding:10px 18px; border-radius:24px; font-weight:700; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; } #toast.on { opacity:1; } #toast.bad { background:#c0392b; } #toast.good { background:#1f9d55; }
+  #win { position:fixed; inset:0; background:rgba(20,10,40,.75); display:none; align-items:center; justify-content:center; z-index:30; } #win.on { display:flex; }
+  #win .box { background:#fff; border-radius:20px; padding:26px 34px; text-align:center; max-width:420px; } #win .stars { font-size:48px; letter-spacing:6px; } #win h2 { font-size:22px; text-transform:none; color:#222; margin:6px 0; }
+  .shake { animation: shk .35s; } @keyframes shk { 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
   text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
 </style>
 </head>
@@ -61,6 +74,7 @@
     <button class="t" id="bClear">Borrar cables</button>
     <button class="t" id="bCopy">Copiar lista de conexiones</button>
     <button class="t" id="bPlan">Plano numerado</button>
+    <button class="t gbtn" id="bGame">🎮 Modo juego</button>
     <span style="flex:1"></span>
     <label class="chk"><input type="checkbox" id="oHint" checked> Pistas</label>
     <label class="chk"><input type="checkbox" id="oBat" checked> Batería</label>
@@ -68,6 +82,15 @@
     <label class="chk"><input type="checkbox" id="oBuz"> Zumbador</label>
   </div>
 
+  <div class="card" id="game">
+    <div class="top"><span class="stat" id="gScore">0 <small>puntos</small></span><span class="stat" id="gTime">0:00</span><span class="stat" id="gMis">0 <small>fallos</small></span>
+      <span style="flex:1"></span>
+      <label class="chk"><input type="checkbox" id="gHard"> Difícil (sin pistas de pines)</label>
+      <label class="chk"><input type="checkbox" id="gSnd" checked> Sonido</label>
+      <button class="t" id="gHint">💡 Pista (−10)</button><button class="t" id="gRestart">Reiniciar</button><button class="t" id="gExit">Salir</button></div>
+    <div class="lv" id="gLv"></div>
+    <div id="gMis2"></div>
+  </div>
   <div class="board"><svg id="svg" viewBox="0 0 1400 1140" role="img" aria-label="Placas y terminales para cablear"></svg></div>
   <div class="hint">El orden de los pines del ESP32 es orientativo: sigue los nombres impresos en <i>tu</i> placa. Los pines de 3,3 V, GND y VIN/5 V son siempre el mismo punto eléctrico aunque tu placa los repita.</div>
 
@@ -80,6 +103,8 @@
   <div class="card noprint" style="margin-top:14px"><h2>Falta o sobra</h2><div id="missing"></div></div>
   <div id="plan"></div>
 </main>
+<div id="toast"></div>
+<div id="win"><div class="box"><div class="stars" id="wStars"></div><h2 id="wTitle"></h2><div id="wTxt" style="color:#555;line-height:1.5"></div><button class="t pri" id="wAgain" style="margin-top:14px">Jugar otra vez</button> <button class="t" id="wClose" style="margin-top:14px">Ver mi montaje</button></div></div>
 
 <script>
 "use strict";
@@ -172,7 +197,8 @@ for (const [nid,n] of Object.entries(NETS)) for (const t of n.t) expectedNet[t] 
 // ======================= ESTADO: CABLES =======================
 let wires = [];           // {a: "key@..", b: "key@..", id}
 let sel = null;           // clave de terminal seleccionada
-let showNums = false;     // plano numerado
+let showNums = false;
+let gameHintSet = new Set();     // plano numerado
 const keys = Object.keys(term);
 const idOf = k => term[k].id;
 function addWire(ka, kb) {
@@ -464,12 +490,13 @@ function render() {
     el("circle",{cx:t.x,cy:t.y,r:14,fill:"transparent"},g);
     el("circle",{cx:t.x,cy:t.y,r:7.5,fill:isSel?"#1c7ed6":"url(#gGold)",stroke:isSel?"#0b4a8a":"#6b4e0c","stroke-width":1.6},g);
     el("circle",{cx:t.x,cy:t.y,r:3,fill:used?"#222":"#3a2a05"},g);
+    if (gameHintSet.has(t.id)) { const hc = el("circle",{cx:t.x,cy:t.y,r:14,fill:"none",stroke:"#ff6b00","stroke-width":4},g); el("animate",{attributeName:"r",values:"10;22;10",dur:"0.9s",repeatCount:"indefinite"},hc); }
     if (isValid) el("circle",{cx:t.x,cy:t.y,r:14,fill:"none",stroke:"#1f9d55","stroke-width":3.5},g);
     // etiqueta hacia dentro de la placa
     const inwards = {L:[15,4,"start"],R:[-15,4,"end"],T:[0,26,"middle"],B:[0,-14,"middle"]}[t.side];
     const darkBoard = ["esp","disp","enc","hx","chg","buz","lipo"].includes(t.comp);
     el("text",{x:t.x+inwards[0],y:t.y+inwards[1],"text-anchor":inwards[2],"font-size":t.comp==="esp"?12.5:13,"font-weight":"600",fill:darkBoard?"#fff":"#222",stroke:darkBoard?"rgba(0,0,0,.45)":"rgba(255,255,255,.7)","stroke-width":2.2,"paint-order":"stroke"},g,t.label);
-    g.addEventListener("click", () => { if (sel===null) sel = k; else if (sel===k) sel = null; else { addWire(sel,k); sel = null; } update(); });
+    g.addEventListener("click", () => { if (sel===null) sel = k; else if (sel===k) sel = null; else { const a = sel; sel = null; userWire(a,k); } update(); });
   }
   return A;
 }
@@ -522,6 +549,7 @@ function update() {
     $("scrNote").textContent = powered ? "La pantalla no está bien cableada: queda en negro (o con la luz encendida y vacía)." : "Sin alimentación.";
   }
   renderPlan();
+  if (typeof gameTick === 'function') gameTick();
   window.__state = {parts:st, dangers:A.dangers, conflicts:A.conflicts, powered, wires:wires.length};
 }
 // ======================= ACCIONES =======================
@@ -569,7 +597,91 @@ $("bPlan").onclick = () => { showNums = !showNums; if (showNums && wires.length 
 $("bAuto").onclick = autoWire; $("bClear").onclick = clearAll; $("bErr").onclick = errExample;
 $("bCopy").onclick = async () => { const t = checklist(); try { await navigator.clipboard.writeText(t); $("bCopy").textContent = "¡Copiada!"; } catch (e) { $("bCopy").textContent = "No se pudo copiar"; } setTimeout(() => $("bCopy").textContent = "Copiar lista de conexiones", 1800); };
 for (const id of ["oHint","oBat","oRate","oBuz"]) $(id).addEventListener("change", update);
-window.lab = {plan:(on)=>{ showNums = on; update(); }, planOrder, connect, clearAll, autoWire, errExample, update, NETS, checklist, setOpt:(o)=>{ for (const [k,v] of Object.entries(o)) $("o"+k).checked = v; update(); }};
+
+// ======================= MODO JUEGO =======================
+const G = {on:false, started:0, mistakes:0, hints:0, done:new Set(), finished:false, timer:null, lastNets:new Set(), secs:0};
+let actx = null;
+function beep(f, d, type, when) { if (!$("gSnd").checked) return; try { actx ??= new (window.AudioContext||window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(); o.type = type||"sine"; o.frequency.value = f; g.gain.value = .08; o.connect(g); g.connect(actx.destination); const t = actx.currentTime + (when||0); o.start(t); g.gain.exponentialRampToValueAtTime(.0001, t+d); o.stop(t+d); } catch(e){} }
+let toastT = null;
+function toast(msg, kind) { const t = $("toast"); t.textContent = msg; t.className = "on " + (kind||""); clearTimeout(toastT); toastT = setTimeout(() => t.className = "", 2000); }
+function activeNets() { // redes necesarias según opciones
+  const out = {};
+  for (const [nid,n] of Object.entries(NETS)) {
+    if (["LIPO+","LIPO-","ADC","5V"].includes(nid) && !OPT.bat) continue; if (nid==="BUZ" && !OPT.buz) continue; if (nid==="RATE" && !OPT.rate) continue;
+    const ts = n.t.filter(t => !(["lipo","chg","div"].includes(t.split(".")[0]) && !OPT.bat) && !(t.startsWith("buz.") && !OPT.buz));
+    if (ts.length >= 2) out[nid] = ts;
+  }
+  return out;
+}
+function gameLevels() { const an = activeNets(); return PHASES.filter(P => P.nets.length).map(P => ({t:P.t, nets:P.nets.filter(n => an[n])})).filter(L => L.nets.length); }
+function netDone(nid, ts) { // ¿están todos los terminales de la red unidos con cables correctos?
+  const par = {}; const f = x => { while ((par[x] ??= x) !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+  for (const w of wires) { const a = idOf(w.a), b = idOf(w.b); if (expectedNet[a]===nid && expectedNet[b]===nid) par[f(a)] = f(b); }
+  const r = f(ts[0]); return ts.every(t => f(t)===r);
+}
+function userWire(a, b) { // cable puesto por el usuario (clic)
+  if (!G.on || G.finished) { addWire(a,b); return; }
+  const ia = idOf(a), ib = idOf(b), na = expectedNet[ia], nb = expectedNet[ib];
+  if (na && na===nb) { if (!addWire(a,b)) toast("Ese cable ya está", ""); return; }
+  G.mistakes++; beep(160,.3,"sawtooth"); document.body.classList.add("shake"); setTimeout(() => document.body.classList.remove("shake"), 400);
+  const ka = na ? NETS[na].kind : "", kb = nb ? NETS[nb].kind : "";
+  const short = (ka==="power"&&kb==="gnd")||(ka==="gnd"&&kb==="power");
+  toast(short ? "💥 ¡Cortocircuito! +5 V con masa: se habría quemado algo" : "✖ Ese cable no va ahí (" + niceName(ia) + " ↔ " + niceName(ib) + ")", "bad");
+}
+function missionText(nid, ts) {
+  const hard = $("gHard").checked, n = NETS[nid];
+  if (!hard) return `<b>${n.name}</b>: ${ts.map(niceName).join(" ↔ ")}`;
+  const parts = [...new Set(ts.map(t => niceName(t).split(" ")[0]))];
+  return `<b>${n.name}</b> <span class="detail">— une: ${parts.join(" con ")}. ${NOTES[nid]||""}</span>`;
+}
+function gameTick() {
+  if (!G.on) return;
+  const an = activeNets(), lv = gameLevels(); const nowDone = new Set(Object.keys(an).filter(n => netDone(n, an[n])));
+  // nuevos aciertos
+  for (const n of nowDone) if (!G.lastNets.has(n)) { beep(660,.12,"triangle"); toast("✔ " + NETS[n].name + "  +10", "good"); }
+  G.lastNets = nowDone;
+  let cur = -1, html = "", all = true;
+  lv.forEach((L,i) => { const d = L.nets.filter(n => nowDone.has(n)).length, full = d===L.nets.length; if (!full) { all = false; if (cur<0) cur = i; }
+    if (full && !G.done.has(L.t)) { G.done.add(L.t); beep(523,.15,"square"); beep(784,.25,"square",.15); toast("🏁 Nivel completado: " + L.t + "  +50", "good"); } });
+  lv.forEach((L,i) => { const d = L.nets.filter(n => nowDone.has(n)).length, full = d===L.nets.length;
+    html += `<div class="lvb ${full?"done":i===cur?"cur":""}"><b>${full?"✔ ":""}${L.t}</b><div class="bar2"><i style="width:${100*d/L.nets.length}%"></i></div><small>${d}/${L.nets.length} conexiones</small></div>`; });
+  $("gLv").innerHTML = html;
+  $("gMis2").innerHTML = cur>=0 ? `<h2 style="margin-top:6px">Misión actual: ${lv[cur].t}</h2>` + lv[cur].nets.map(n => `<div class="mis ${nowDone.has(n)?"ok":""}">${missionText(n, an[n])}</div>`).join("") : "";
+  const score = gameScore(nowDone, lv); $("gScore").innerHTML = score + " <small>puntos</small>"; $("gMis").innerHTML = G.mistakes + " <small>fallos</small>";
+  if (all && lv.length && !G.finished) finishGame(score);
+}
+function gameScore(nowDone, lv) { const nets = nowDone.size, levels = G.done.size; let s = nets*10 + levels*50 - G.mistakes*5 - G.hints*10; if (G.finished) s += Math.max(0, Math.floor((600 - G.secs)/6)); return Math.max(0, s); }
+function finishGame(score) {
+  G.finished = true; clearInterval(G.timer); const bonus = Math.max(0, Math.floor((600 - G.secs)/6)); score += bonus;
+  const stars = (G.mistakes===0 && G.hints===0) ? 3 : (G.mistakes + G.hints <= 4 ? 2 : 1);
+  $("gScore").innerHTML = score + " <small>puntos</small>";
+  $("wStars").textContent = "★".repeat(stars) + "☆".repeat(3-stars);
+  $("wTitle").textContent = stars===3 ? "¡Báscula encendida, sin humo!" : "¡Báscula cableada!";
+  $("wTxt").innerHTML = `${score} puntos · ${fmt(G.secs)} · ${G.mistakes} fallos · ${G.hints} pistas<br>${stars===3?"Montaje perfecto: ya puedes soldar de verdad.":"Repite para conseguir las 3 estrellas: sin fallos ni pistas."}`;
+  [523,659,784,1047].forEach((f,i) => beep(f,.25,"triangle",i*.14)); $("win").classList.add("on");
+}
+const fmt = s => Math.floor(s/60) + ":" + String(s%60).padStart(2,"0");
+function gameStart() {
+  G.on = true; G.finished = false; G.mistakes = 0; G.hints = 0; G.done = new Set(); G.lastNets = new Set(); G.secs = 0; wires = []; sel = null; gameHintSet = new Set();
+  clearInterval(G.timer); G.timer = setInterval(() => { if (!G.finished) { G.secs++; $("gTime").textContent = fmt(G.secs); } }, 1000);
+  $("game").classList.add("on"); $("gTime").textContent = "0:00"; $("win").classList.remove("on");
+  for (const id of ["bAuto","bErr"]) $(id).disabled = true;
+  update();
+}
+function gameExit() { G.on = false; clearInterval(G.timer); gameHintSet = new Set(); $("game").classList.remove("on"); $("win").classList.remove("on"); for (const id of ["bAuto","bErr"]) $(id).disabled = false; update(); }
+function gameHint() {
+  if (!G.on || G.finished) return; const an = activeNets(), lv = gameLevels();
+  for (const L of lv) for (const n of L.nets) if (!netDone(n, an[n])) { // elige un terminal aún sin cable correcto
+    const par = {}; const f = x => { while ((par[x] ??= x) !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+    for (const w of wires) { const a = idOf(w.a), b = idOf(w.b); if (expectedNet[a]===n && expectedNet[b]===n) par[f(a)] = f(b); }
+    const r = f(an[n][0]), miss = an[n].filter(t => f(t)!==r); gameHintSet = new Set([an[n][0], miss[0]]); G.hints++; beep(1200,.1); toast("💡 Une los dos pines que parpadean", ""); update();
+    setTimeout(() => { gameHintSet = new Set(); update(); }, 4000); return;
+  }
+}
+$("bGame").onclick = gameStart; $("gRestart").onclick = gameStart; $("gExit").onclick = gameExit; $("gHint").onclick = gameHint; $("wAgain").onclick = gameStart; $("wClose").onclick = () => $("win").classList.remove("on");
+$("gHard").addEventListener("change", update);
+
+window.lab = {keyFor, userWire, gameStart, gameExit, gameHint, G, plan:(on)=>{ showNums = on; update(); }, planOrder, connect, clearAll, autoWire, errExample, update, NETS, checklist, setOpt:(o)=>{ for (const [k,v] of Object.entries(o)) $("o"+k).checked = v; update(); }};
 update();
 </script>
 </body>
