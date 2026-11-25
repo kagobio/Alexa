@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio de conexiones: báscula de café</title>
+<style>
+  :root { --bg:#f4f0ea; --ink:#222; --ok:#1f9d55; --warn:#d98200; --bad:#d62d2d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 18px 14px 40px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 12px; color:#555; font-size: 14px; line-height:1.5; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin: 10px 0; }
+  button.t { font:inherit; font-size:14px; padding:8px 13px; border-radius:10px; border:1px solid #d6d1c6; background:#faf8f3; cursor:pointer; }
+  button.t:hover { background:#f0ece2; } button.pri { background:#2b2b2b; color:#fff; border-color:#2b2b2b; } button.pri:hover { background:#444; }
+  label.chk { font-size:14px; display:inline-flex; gap:6px; align-items:center; cursor:pointer; margin-right:8px; }
+  .board { background:#fff; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.1); overflow:hidden; }
+  svg { width:100%; height:auto; display:block; touch-action: manipulation; user-select:none; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:14px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background:#fff; border-radius:14px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { font-size:13px; margin:0 0 8px; text-transform:uppercase; letter-spacing:.06em; color:#777; }
+  .row { display:flex; gap:8px; align-items:flex-start; padding:5px 0; border-bottom:1px solid #eee; font-size:14px; }
+  .row:last-child { border-bottom:0; }
+  .ic { width:22px; flex:none; text-align:center; font-weight:700; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); } .na { color:#999; }
+  .detail { color:#666; font-size:13px; margin-top:2px; }
+  pre.serial { background:#101418; color:#b8f7c0; padding:10px; border-radius:10px; font-size:12.5px; line-height:1.5; min-height:130px; margin:0; overflow:auto; white-space:pre-wrap; }
+  pre.serial .e { color:#ff8a80; } pre.serial .w { color:#ffd166; }
+  .danger { background:#fdecec; border:1px solid #f3b5b5; color:#8c1f1f; border-radius:10px; padding:8px 10px; font-size:14px; margin-bottom:8px; }
+  .hint { font-size:12.5px; color:#777; margin-top:6px; }
+  canvas#scr { width:100%; max-width:380px; background:#000; border-radius:8px; display:block; }
+  .term { cursor:pointer; } .term circle { transition: r .1s; } .term:hover circle { r:9; }
+  .wire { cursor:pointer; } .wire:hover path.vis { stroke-width:8; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Laboratorio de conexiones</h1>
+  <p class="sub">Cablea la báscula <b>sin tocar nada real</b>: pulsa un terminal y luego otro para unirlos con un cable (pulsa un cable para quitarlo). El laboratorio compara tu cableado con los pines del firmware, te dice qué funcionaría y te avisa de lo que podría <b>dañar</b> las placas. Empieza con “Conectar todo bien” para ver la solución, o con “Ejemplo con errores” para ver los fallos típicos.</p>
+
+  <div class="bar">
+    <button class="t pri" id="bAuto">Conectar todo bien</button>
+    <button class="t" id="bErr">Ejemplo con errores</button>
+    <button class="t" id="bClear">Borrar cables</button>
+    <button class="t" id="bCopy">Copiar lista de conexiones</button>
+    <span style="flex:1"></span>
+    <label class="chk"><input type="checkbox" id="oHint" checked> Pistas</label>
+    <label class="chk"><input type="checkbox" id="oBat" checked> Batería</label>
+    <label class="chk"><input type="checkbox" id="oRate" checked> RATE (80 SPS)</label>
+    <label class="chk"><input type="checkbox" id="oBuz"> Zumbador</label>
+  </div>
+
+  <div class="board"><svg id="svg" viewBox="0 0 1400 1120" role="img" aria-label="Placas y terminales para cablear"></svg></div>
+  <div class="hint">El orden de los pines del ESP32 es orientativo: sigue los nombres impresos en <i>tu</i> placa. Los pines de 3,3 V, GND y VIN/5 V son siempre el mismo punto eléctrico aunque tu placa los repita.</div>
+
+  <div class="grid">
+    <div class="card"><h2>Peligros</h2><div id="danger"></div><h2 style="margin-top:12px">Estado de cada parte</h2><div id="status"></div></div>
+    <div class="card"><h2>Monitor serie (simulado)</h2><pre class="serial" id="serial"></pre>
+      <h2 style="margin-top:12px">Pantalla</h2><canvas id="scr" width="320" height="172"></canvas>
+      <div class="hint" id="scrNote"></div></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h2>Falta o sobra</h2><div id="missing"></div></div>
+</main>
+
+<script>
+"use strict";
+// ======================= ESPECIFICACIÓN (pines del firmware CoffeeScale.ino) =======================
+// Cada "red esperada" lista los terminales que deben estar unidos eléctricamente.
+const NETS = {
+  "3V3":   {kind:"power", name:"3,3 V",         t:["esp.3V3","hx.VCC","disp.VCC","enc.+"]},
+  "GND":   {kind:"gnd",   name:"GND",           t:["esp.GND","hx.GND","disp.GND","enc.GND","btn.2","buz.-","div.GND","chg.OUT-"]},
+  "5V":    {kind:"power", name:"5 V (VIN)",     t:["esp.VIN","chg.OUT+"]},
+  "USB5":  {kind:"power", name:"USB-C 5 V",     t:["usb.5V","esp.USB"]},
+  "LIPO+": {kind:"power", name:"Batería +",     t:["lipo.+","chg.B+","div.IN"]},
+  "LIPO-": {kind:"gnd",   name:"Batería −",     t:["lipo.-","chg.B-"]},
+  "DT":    {kind:"sig", name:"HX711 DT",   t:["esp.GPIO16","hx.DT"]},
+  "SCK":   {kind:"sig", name:"HX711 SCK",  t:["esp.GPIO17","hx.SCK"]},
+  "RATE":  {kind:"sig", name:"HX711 RATE", t:["esp.GPIO4","hx.RATE"]},
+  "E+":    {kind:"sig", name:"Celda E+",   t:["hx.E+","cell.E+"]},
+  "E-":    {kind:"sig", name:"Celda E−",   t:["hx.E-","cell.E-"]},
+  "A-":    {kind:"sig", name:"Celda A−",   t:["hx.A-","cell.A-"]},
+  "A+":    {kind:"sig", name:"Celda A+",   t:["hx.A+","cell.A+"]},
+  "SCLK":  {kind:"sig", name:"Pantalla SCLK", t:["esp.GPIO18","disp.SCLK"]},
+  "MOSI":  {kind:"sig", name:"Pantalla MOSI", t:["esp.GPIO23","disp.MOSI"]},
+  "CS":    {kind:"sig", name:"Pantalla CS",   t:["esp.GPIO27","disp.CS"]},
+  "DC":    {kind:"sig", name:"Pantalla DC",   t:["esp.GPIO26","disp.DC"]},
+  "RST":   {kind:"sig", name:"Pantalla RST",  t:["esp.GPIO25","disp.RST"]},
+  "BLK":   {kind:"sig", name:"Pantalla luz (BLK)", t:["esp.GPIO22","disp.BLK"]},
+  "ENC_A": {kind:"sig", name:"Encoder CLK", t:["esp.GPIO33","enc.CLK"]},
+  "ENC_B": {kind:"sig", name:"Encoder DT",  t:["esp.GPIO32","enc.DT"]},
+  "ENC_SW":{kind:"sig", name:"Encoder SW",  t:["esp.GPIO19","enc.SW"]},
+  "BTN":   {kind:"sig", name:"Botón",       t:["esp.GPIO21","btn.1"]},
+  "ADC":   {kind:"sig", name:"Medida de batería (GPIO35)", t:["esp.GPIO35","div.MID"]},
+  "BUZ":   {kind:"sig", name:"Zumbador",    t:["esp.GPIO13","buz.+"]},
+};
+// Qué redes necesita cada parte (para el estado y la simulación)
+const OPT = {bat:false, rate:false, buz:false};   // se actualizan con las casillas
+const PARTS = [
+  {id:"power", name:"Alimentación del ESP32", special:true},
+  {id:"hx",   name:"HX711 + celda de carga", nets:["3V3","GND","DT","SCK","E+","E-","A-","A+"], need:["hx.VCC","hx.GND","hx.DT","hx.SCK","hx.E+","hx.E-","hx.A-","hx.A+","cell.E+","cell.E-","cell.A-","cell.A+"]},
+  {id:"rate", name:"HX711 a 80 lecturas/s (RATE)", opt:"rate", nets:["RATE"], need:["hx.RATE"]},
+  {id:"disp", name:"Pantalla", nets:["3V3","GND","SCLK","MOSI","CS","DC","RST","BLK"], need:["disp.VCC","disp.GND","disp.SCLK","disp.MOSI","disp.CS","disp.DC","disp.RST","disp.BLK"]},
+  {id:"enc",  name:"Encoder (pomo)", nets:["3V3","GND","ENC_A","ENC_B","ENC_SW"], need:["enc.+","enc.GND","enc.CLK","enc.DT","enc.SW"]},
+  {id:"btn",  name:"Botón azul", nets:["GND","BTN"], need:["btn.1","btn.2"]},
+  {id:"bat",  name:"Batería y medida de nivel", opt:"bat", nets:["LIPO+","LIPO-","GND","5V","ADC"], need:["lipo.+","lipo.-","chg.B+","chg.B-","chg.OUT+","chg.OUT-","div.IN","div.GND","div.MID"]},
+  {id:"buz",  name:"Zumbador", opt:"buz", nets:["GND","BUZ"], need:["buz.+","buz.-"]},
+];
+
+// ======================= LAYOUT =======================
+const WIRE_COL = {"3V3":"#d62d2d","GND":"#1a1a1a","5V":"#e8590c","USB5":"#e64980","LIPO+":"#c92a2a","LIPO-":"#343a40","DT":"#2f9e44","SCK":"#e8b100","RATE":"#868e96",
+  "E+":"#d62d2d","E-":"#1a1a1a","A-":"#adb5bd","A+":"#2f9e44","SCLK":"#8e44ad","MOSI":"#8e44ad","CS":"#8e44ad","DC":"#8e44ad","RST":"#8e44ad","BLK":"#e67e22",
+  "ENC_A":"#12a79d","ENC_B":"#12a79d","ENC_SW":"#12a79d","BTN":"#1c7ed6","ADC":"#12a79d","BUZ":"#e64980"};
+const comps = {};
+function C(id,title,x,y,w,h,color,terms) { comps[id] = {id,title,x,y,w,h,color,terms}; }
+// terms: [label, side(L/R/T/B), position(px a lo largo del lado)]
+const espL = ["3V3","GPIO13","GPIO35","GPIO32","GPIO33","GPIO25","GPIO26","GPIO27","GPIO14","GPIO12","GND","VIN","EN","GPIO36","GPIO39","GPIO34"];
+const espR = ["GND","GPIO23","GPIO22","GPIO21","GPIO19","GPIO18","GPIO5","GPIO17","GPIO16","GPIO4","GPIO0","GPIO2","GPIO15","GND","TX0","RX0"];
+const espT = [];
+espL.forEach((n,i)=>espT.push([n,"L",120+i*46,n]));
+espR.forEach((n,i)=>espT.push([n,"R",120+i*46,n]));
+espT.push(["USB","B",140,"USB-C"]);
+C("esp","ESP32-WROOM-32D (DevKit)",560,70,280,830,"#e8f4ec",espT);
+C("hx","HX711",60,70,250,300,"#fff",[["VCC","R",130],["GND","R",172],["DT","R",214],["SCK","R",256],["RATE","R",298],["E+","B",40],["E-","B",100],["A-","B",160],["A+","B",220]]);
+C("cell","Celda de carga 5 kg",60,470,250,100,"#fff",[["E+","T",40],["E-","T",100],["A-","T",160],["A+","T",220]]);
+C("disp",'Pantalla DFRobot 1.47"',1090,70,250,420,"#fff",[["VCC","L",120],["GND","L",160],["SCLK","L",200],["MOSI","L",240],["CS","L",280],["DC","L",320],["RST","L",360],["BLK","L",400]]);
+C("enc","Encoder KY-040",1090,540,250,230,"#fff",[["CLK","L",120],["DT","L",160],["SW","L",200],["+","L",200+40],["GND","L",200+80]]);
+C("btn","Botón MX (azul)",1090,820,250,110,"#fff",[["1","L",70],["2","L",100]]);
+C("buz","Zumbador pasivo",60,640,250,100,"#fff",[["+","R",60],["-","R",90]]);
+C("lipo","LiPo 1S 3,7 V",60,850,170,100,"#eaf4ff",[["+","R",50],["-","R",80]]);
+C("chg","Carga + elevador 5 V",290,820,250,160,"#eaf4ff",[["B+","L",60],["B-","L",100],["OUT+","R",60],["OUT-","R",100]]);
+C("div","Divisor 100k / 100k (+100 nF)",290,1000,250,100,"#eaf4ff",[["IN","L",50],["MID","R",40],["GND","R",76]]);
+C("usb","Fuente USB-C 5 V",640,1010,170,90,"#fff0f4",[["5V","T",85]]);
+
+const term = {};   // id -> {x,y,comp,label}
+for (const c of Object.values(comps)) for (const [label,side,pos,disp] of c.terms) {
+  let id = c.id + "." + label; if (c.id==="esp" && (label==="GND")) id = "esp.GND";
+  if (c.id==="esp" && label==="VIN") id = "esp.VIN";
+  if (c.id==="esp" && /^GPIO/.test(label)) id = "esp." + label;
+  let x,y; if (side==="L"){x=c.x;y=c.y+pos;} else if (side==="R"){x=c.x+c.w;y=c.y+pos;} else if (side==="T"){x=c.x+pos;y=c.y;} else {x=c.x+pos;y=c.y+c.h;}
+  const key = id + "@" + Object.keys(term).length;     // GND y 3V3 repetidos: mismo id eléctrico, otra posición
+  term[key] = {id,x,y,side,label:disp||label,comp:c.id};
+}
+const ESP_LABEL = {"esp.3V3":"ESP32 3V3","esp.GND":"ESP32 GND","esp.VIN":"ESP32 VIN/5V","esp.USB":"ESP32 USB-C"};
+function niceName(id) {
+  if (ESP_LABEL[id]) return ESP_LABEL[id];
+  const [c,l] = id.split("."); const comp = comps[c]; const short = {esp:"ESP32",hx:"HX711",cell:"Celda",disp:"Pantalla",enc:"Encoder",btn:"Botón",buz:"Zumbador",lipo:"LiPo",chg:"Módulo de carga",div:"Divisor",usb:"USB-C"}[c]||c;
+  return short + " " + l.replace("GPIO","GPIO");
+}
+// terminal -> red esperada
+const expectedNet = {};
+for (const [nid,n] of Object.entries(NETS)) for (const t of n.t) expectedNet[t] = nid;
+
+// ======================= ESTADO: CABLES =======================
+let wires = [];           // {a: "key@..", b: "key@..", id}
+let sel = null;           // clave de terminal seleccionada
+const keys = Object.keys(term);
+const idOf = k => term[k].id;
+function addWire(ka, kb) {
+  if (ka===kb) return false; if (wires.some(w => (w.a===ka&&w.b===kb)||(w.a===kb&&w.b===ka))) return false;
+  wires.push({a:ka,b:kb}); return true;
+}
+function keyFor(id, nth=0) { const ks = keys.filter(k => term[k].id===id); return ks[nth] || ks[0]; }
+function connect(ida, idb) { // API: conecta por id eléctrico (usa el primer pin con ese nombre)
+  const a = keyFor(ida), b = keyFor(idb); if (!a || !b) throw new Error("terminal desconocido: " + ida + " / " + idb); return addWire(a,b);
+}
+
+// ======================= ANÁLISIS =======================
+function analyze() {
+  // unión-búsqueda sobre ids eléctricos
+  const parent = {}; const find = x => { while ((parent[x] ??= x) !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  const uni = (a,b) => { parent[find(a)] = find(b); };
+  for (const w of wires) uni(idOf(w.a), idOf(w.b));
+  const comp = id => find(id);
+  const members = {}; const touched = new Set();
+  for (const w of wires) { touched.add(idOf(w.a)); touched.add(idOf(w.b)); }
+  for (const id of touched) (members[comp(id)] ??= []).push(id);
+  const active = new Set(PARTS.filter(p => !p.opt || OPT[p.opt]).flatMap(p => p.need || []));
+  const conflicts = [], dangers = [], missing = [];
+  // conflictos y peligros: redes del cableado con terminales de redes esperadas distintas
+  for (const ids of Object.values(members)) {
+    const nets = [...new Set(ids.map(i => expectedNet[i] || "?"))];
+    if (nets.length < 2) continue;
+    if (nets.every(n => NETS[n]?.kind === "gnd")) continue;     // masas distintas unidas (p. ej. batería − con GND): inofensivo
+    const has = k => nets.includes(k), kinds = nets.map(n => NETS[n]?.kind || "x");
+    const powers = nets.filter(n => NETS[n]?.kind==="power"), gnds = nets.filter(n => NETS[n]?.kind==="gnd"), sigs = nets.filter(n => NETS[n]?.kind==="sig");
+    const lab = ids.map(niceName).join(" ↔ ");
+    if (powers.length && gnds.length) dangers.push(`CORTOCIRCUITO: ${powers.map(n=>NETS[n].name).join(" / ")} unido a ${gnds.map(n=>NETS[n].name).join(" / ")} (${lab}).`);
+    else if (powers.length && sigs.length) dangers.push(`Tensión (${powers.map(n=>NETS[n].name).join(" / ")}) en un pin de señal (${sigs.map(n=>NETS[n].name).join(", ")}): puede dañar el ESP32 o la placa conectada (${lab}).`);
+    else if (powers.length > 1) {
+      if (has("3V3")) dangers.push(`${powers.filter(n=>n!=="3V3").map(n=>NETS[n].name).join(" / ")} unido a la línea de 3,3 V: puede dañar el ESP32, la pantalla y el HX711 (${lab}).`);
+      else if (has("LIPO+")) dangers.push(`Batería directa a ${powers.filter(n=>n!=="LIPO+").map(n=>NETS[n].name).join(" / ")} sin pasar por el módulo: peligroso (${lab}).`);
+      else dangers.push(`Dos fuentes distintas unidas (${powers.map(n=>NETS[n].name).join(" + ")}): ${lab}.`);
+    } else conflicts.push(`Unión inesperada: ${lab}. En el firmware, ${nets.filter(n=>n!=="?").map(n=>NETS[n]?.name || n).join(" y ")} son redes distintas.`);
+  }
+  // terminales conectados a algo que no esperan (solo uno de la red esperada + pines sin uso)
+  for (const [c,ids] of Object.entries(members)) {
+    const unknown = ids.filter(i => !expectedNet[i]);
+    if (unknown.length && ids.length > 1 && unknown.length === ids.length) conflicts.push(`${unknown.map(niceName).join(", ")} no se usa en el firmware (unido a ${ids.filter(i=>expectedNet[i]).map(niceName).join(", ") || "otro pin sin uso"}).`);
+  }
+  return {comp, members, conflicts, dangers, active};
+}
+function partStatus(p, A) {
+  if (p.special) return powerStatus(A);
+  if (p.opt && !OPT[p.opt]) return {s:"na", t:"opcional: desactivada"};
+  const need = p.need, miss = [], connectedAny = [];
+  for (const t of need) {
+    const nid = expectedNet[t]; const tl = NETS[nid].t; const ref = (t !== tl[0]) ? tl[0] : tl[1];
+    const ok = A.comp(t) === A.comp(ref);
+    if (ok) connectedAny.push(t); else miss.push(`${niceName(t)} → ${niceName(ref)}`);
+  }
+  // un terminal "ref" propio (p. ej. celda) cuenta como conectado si comparte red con su pareja
+  if (connectedAny.length === 0) return {s:"none", t:"sin conectar", miss};
+  if (miss.length) return {s:"part", t:`faltan ${miss.length} conexión(es)`, miss};
+  return {s:"ok", t:"conectada"};
+}
+function powerStatus(A) {
+  const usb = A.comp("usb.5V") === A.comp("esp.USB") && wires.length > 0;
+  const bat = OPT.bat && A.comp("chg.OUT+") === A.comp("esp.VIN") && A.comp("chg.OUT-") === A.comp("esp.GND") && A.comp("lipo.+") === A.comp("chg.B+") && A.comp("lipo.-") === A.comp("chg.B-");
+  if (usb && bat) return {s:"warn", t:"USB y batería a la vez: comparten VIN. No probado: desconecta una fuente al programar.", usb, bat};
+  if (usb) return {s:"ok", t:"por el USB-C", usb, bat};
+  if (bat) return {s:"ok", t:"por la batería (módulo → VIN)", usb, bat};
+  return {s:"none", t:"sin alimentación: conecta el USB-C o la batería", usb, bat};
+}
+
+// ======================= DIBUJO =======================
+const svg = document.getElementById("svg"); const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent, text) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text!=null) e.textContent = text; (parent||svg).appendChild(e); return e; }
+function wireColor(w) { const na = expectedNet[idOf(w.a)], nb = expectedNet[idOf(w.b)]; return (na && na===nb) ? (WIRE_COL[na]||"#555") : null; }
+function wirePath(w) {
+  const a = term[w.a], b = term[w.b]; const dir = s => s==="L"?-1:s==="R"?1:0, dv = s => s==="T"?-1:s==="B"?1:0;
+  const k = Math.min(160, Math.hypot(a.x-b.x, a.y-b.y)/2 + 30);
+  return `M${a.x},${a.y} C${a.x+dir(a.side)*k},${a.y+dv(a.side)*k} ${b.x+dir(b.side)*k},${b.y+dv(b.side)*k} ${b.x},${b.y}`;
+}
+function render() {
+  svg.innerHTML = "";
+  const A = analyze();
+  for (const c of Object.values(comps)) {
+    const dashed = (c.id==="lipo"||c.id==="chg"||c.id==="div") && !OPT.bat || (c.id==="buz" && !OPT.buz);
+    el("rect",{x:c.x,y:c.y,width:c.w,height:c.h,rx:14,fill:c.color,stroke:dashed?"#bbb":"#222","stroke-width":dashed?2:3,"stroke-dasharray":dashed?"8 6":"0"});
+    el("text",{x:c.x+c.w/2,y:c.y+(c.id==="esp"?34:30),"text-anchor":"middle","font-size":c.id==="esp"?22:19,"font-weight":"600",fill:dashed?"#aaa":"#222"},null,c.title);
+  }
+  // cables
+  wires.forEach((w,i) => {
+    const col = wireColor(w); const g = el("g",{class:"wire"});
+    el("path",{d:wirePath(w),fill:"none",stroke:"transparent","stroke-width":16},g);
+    el("path",{class:"vis",d:wirePath(w),fill:"none",stroke:col||"#d62d2d","stroke-width":5.5,"stroke-linecap":"round","stroke-dasharray":col?"0":"9 7",opacity:.92},g);
+    g.addEventListener("click", () => { wires.splice(i,1); update(); });
+  });
+  // pistas: terminales válidos respecto al seleccionado
+  const hint = document.getElementById("oHint").checked; let valid = new Set();
+  if (sel && hint) { const nid = expectedNet[idOf(sel)]; if (nid) for (const t of NETS[nid].t) valid.add(t); }
+  for (const k of keys) {
+    const t = term[k]; const c = comps[t.comp];
+    const off = (c.id==="lipo"||c.id==="chg"||c.id==="div") && !OPT.bat || (c.id==="buz" && !OPT.buz);
+    const g = el("g",{class:"term"});
+    const used = wires.some(w => w.a===k || w.b===k);
+    const isSel = sel===k, isValid = valid.has(t.id) && t.id !== idOf(sel||"");
+    el("circle",{cx:t.x,cy:t.y,r:12,fill:"transparent"},g);
+    el("circle",{cx:t.x,cy:t.y,r:7,fill:isSel?"#1c7ed6":used?"#222":off?"#ddd":"#fff",stroke:isSel?"#1c7ed6":"#222","stroke-width":2.5},g);
+    if (isValid) el("circle",{cx:t.x,cy:t.y,r:13,fill:"none",stroke:"#1f9d55","stroke-width":3.5},g);
+    const dx = t.side==="L"?-16:t.side==="R"?16:0, dy = t.side==="T"?-16:t.side==="B"?20:5;
+    const anchor = t.side==="L"?"end":t.side==="R"?"start":"middle";
+    // las etiquetas de los pines del ESP32 van DENTRO de la placa
+    let lx = t.x + dx, la = anchor;
+    if (t.comp==="esp" && t.side==="L") { lx = t.x + 16; la = "start"; } else if (t.comp==="esp" && t.side==="R") { lx = t.x - 16; la = "end"; }
+    if (t.comp!=="esp" && (t.side==="L")) { lx = t.x + 16; la = "start"; } else if (t.comp!=="esp" && t.side==="R") { lx = t.x - 16; la = "end"; }
+    el("text",{x:lx,y:t.y+dy+(t.side==="T"||t.side==="B"?0:0),"text-anchor":la,"font-size":14,fill:off?"#aaa":"#222"},g,t.label);
+    g.addEventListener("click", () => { if (sel===null) sel = k; else if (sel===k) sel = null; else { addWire(sel,k); sel = null; } update(); });
+  }
+  return A;
+}
+
+// ======================= RESULTADOS =======================
+const $ = id => document.getElementById(id);
+function update() {
+  OPT.bat = $("oBat").checked; OPT.rate = $("oRate").checked; OPT.buz = $("oBuz").checked;
+  const A = render();
+  const st = {}; PARTS.forEach(p => st[p.id] = partStatus(p, A));
+  const power = st.power; const powered = power.s==="ok" || power.s==="warn";
+  // peligros
+  $("danger").innerHTML = (A.dangers.length ? A.dangers.map(d => `<div class="danger">⚠ ${d}</div>`).join("") : `<div class="hint">Ningún cortocircuito ni tensión peligrosa detectados.</div>`);
+  // estado
+  const ICON = {ok:["✔","ok"],part:["◐","warn"],none:["○","na"],warn:["⚠","warn"],na:["–","na"]};
+  $("status").innerHTML = PARTS.map(p => {
+    const s = st[p.id]; const [ic,cl] = ICON[s.s] || ["○","na"];
+    return `<div class="row"><div class="ic ${cl}">${ic}</div><div><b>${p.name}</b><div class="detail">${s.t}${s.miss && s.miss.length ? "<br>Falta: " + s.miss.join("; ") : ""}</div></div></div>`;
+  }).join("");
+  // faltante global y sobrante
+  const extra = A.conflicts;
+  $("missing").innerHTML = (extra.length ? extra.map(c => `<div class="row"><div class="ic bad">✖</div><div>${c}</div></div>`).join("") : `<div class="hint">Sin conexiones sobrantes ni cruzadas.</div>`);
+  // simulación
+  const ok = id => st[id].s==="ok" && powered;
+  const lines = [];
+  const L = (t, k) => lines.push(`<span class="${k||""}">${t}</span>`);
+  L("[boot] CoffeeScale");
+  if (!powered) L("(sin alimentación: el ESP32 no arranca)","e");
+  else {
+    L(`Alimentación: ${power.t}`, power.s==="warn"?"w":"");
+    if (ok("disp")) L("TFT: ST7789 172x320 inicializada"); else L("TFT: pantalla sin respuesta (queda en negro)", "e");
+    if (ok("enc")) L("Encoder: listo"); else L("Encoder: sin señal (el pomo no gira ni pulsa)", "w");
+    if (ok("btn")) L("Boton azul: listo"); else L("Boton azul: sin conexion (no se puede iniciar ni abrir Ajustes con el boton)", "w");
+    if (ok("hx")) { L(`HX711: ok (${st.rate.s==="ok" ? "80" : "10"} SPS${OPT.rate && st.rate.s!=="ok" ? ", RATE sin cablear" : ""})`); L("Codigo ntfy: cafe-xxxxxxxxxxxxxxxx"); }
+    else L("ERROR HX711: sin respuesta (revisa VCC, GND, DT y SCK; y los 4 hilos de la celda)", "e");
+    if (OPT.bat) { if (ok("bat")) L("Bateria: 78 % (3,90 V)"); else L("Bateria: sin lectura (revisa el divisor y GPIO35)", "w"); }
+    if (OPT.buz) { if (ok("buz")) L("Zumbador: listo"); else L("Zumbador: sin conexion (no sonara)", "w"); }
+  }
+  $("serial").innerHTML = lines.join("\n");
+  // pantalla simulada
+  const cv = $("scr").getContext("2d"); cv.fillStyle = "#000"; cv.fillRect(0,0,320,172);
+  if (ok("disp")) {
+    cv.fillStyle = "#cfcfcf"; cv.font = "bold 22px system-ui"; cv.textAlign = "left"; cv.fillText("Espresso", 14, 22);
+    if (OPT.bat && ok("bat")) { cv.strokeStyle = "#22dd00"; cv.lineWidth = 1.5; cv.strokeRect(270,9,28,12); cv.fillStyle = "#22dd00"; cv.fillRect(298,12,2,6); cv.fillRect(272,11,19,8); }
+    cv.fillStyle = "#fff"; cv.font = "100px 'Courier New', monospace"; cv.textAlign = "center"; cv.fillText("00:00", 160, 120);
+    cv.font = "bold 36px system-ui"; cv.textAlign = "left"; cv.fillText(ok("hx") ? "0.0" : "--", 14, 160);
+    cv.fillStyle = "#8a8a8a"; cv.font = "bold 22px system-ui"; cv.textAlign = "right"; cv.fillText(ok("hx") ? "/ 36 g" : "sin HX711", 306, 160);
+    $("scrNote").textContent = ok("hx") ? "La pantalla funciona y el HX711 responde." : "La pantalla funciona, pero sin HX711 no hay peso (“--”).";
+  } else {
+    cv.fillStyle = "#222"; cv.font = "16px system-ui"; cv.textAlign = "center"; cv.fillText("sin señal", 160, 90);
+    $("scrNote").textContent = powered ? "La pantalla no está bien cableada: queda en negro (o con la luz encendida y vacía)." : "Sin alimentación.";
+  }
+  window.__state = {parts:st, dangers:A.dangers, conflicts:A.conflicts, powered, wires:wires.length};
+}
+// ======================= ACCIONES =======================
+function clearAll() { wires = []; sel = null; update(); }
+function autoWire() {
+  wires = []; sel = null;
+  const skip = new Set();
+  if (!OPT.bat) ["LIPO+","LIPO-","ADC"].forEach(n => skip.add(n));
+  if (!OPT.buz) skip.add("BUZ");
+  if (!OPT.rate) skip.add("RATE");
+  for (const [nid,n] of Object.entries(NETS)) {
+    if (skip.has(nid)) continue;
+    if (nid==="5V" && !OPT.bat) continue;
+    let ts = n.t.filter(t => !(["lipo","chg","div"].includes(t.split(".")[0]) && !OPT.bat) && !(t.startsWith("buz.") && !OPT.buz));
+    const ref = ts[0]; for (const t of ts.slice(1)) connect(ref, t);
+  }
+  update();
+}
+function errExample() {
+  wires = []; sel = null;
+  connect("esp.GPIO16","hx.SCK"); connect("esp.GPIO17","hx.DT");        // DT y SCK cruzados
+  connect("esp.VIN","hx.VCC"); connect("esp.GND","hx.GND");             // HX711 a 5 V
+  connect("hx.E+","cell.E+"); connect("hx.E-","cell.E-"); connect("hx.A-","cell.A-"); connect("hx.A+","cell.A+");
+  connect("esp.3V3","disp.VCC"); connect("esp.GND","disp.GND");
+  connect("esp.GPIO18","disp.SCLK"); connect("esp.GPIO23","disp.MOSI"); connect("esp.GPIO26","disp.DC"); connect("esp.GPIO25","disp.RST"); connect("esp.GPIO22","disp.BLK");   // falta CS
+  connect("esp.3V3","enc.+"); connect("esp.GND","enc.GND"); connect("esp.GPIO33","enc.CLK"); connect("esp.GPIO32","enc.DT"); connect("esp.GPIO19","enc.SW");
+  connect("esp.GPIO21","btn.1");                                         // falta GND del botón
+  connect("usb.5V","esp.USB");
+  update();
+}
+function checklist() {
+  const out = ["LISTA DE CONEXIONES (firmware CoffeeScale)"]; const skip = new Set();
+  if (!OPT.bat) ["LIPO+","LIPO-","ADC","5V"].forEach(n => skip.add(n)); if (!OPT.buz) skip.add("BUZ"); if (!OPT.rate) skip.add("RATE");
+  const colName = {"#d62d2d":"rojo","#1a1a1a":"negro","#e8590c":"naranja","#e64980":"rosa","#c92a2a":"rojo","#343a40":"negro","#2f9e44":"verde","#e8b100":"amarillo","#868e96":"gris","#adb5bd":"blanco","#8e44ad":"morado","#e67e22":"naranja","#12a79d":"turquesa","#1c7ed6":"azul"};
+  for (const [nid,n] of Object.entries(NETS)) {
+    if (skip.has(nid)) continue;
+    const ts = n.t.filter(t => !(["lipo","chg","div"].includes(t.split(".")[0]) && !OPT.bat) && !(t.startsWith("buz.") && !OPT.buz));
+    if (ts.length < 2) continue;
+    out.push(`- ${n.name} (hilo ${colName[WIRE_COL[nid]]||""}): ${ts.map(niceName).join("  ↔  ")}`);
+  }
+  out.push("", "Antes de dar corriente: comprueba con el polímetro que NO hay continuidad entre 3V3 y GND, ni entre VIN y GND.");
+  return out.join("\n");
+}
+$("bAuto").onclick = autoWire; $("bClear").onclick = clearAll; $("bErr").onclick = errExample;
+$("bCopy").onclick = async () => { const t = checklist(); try { await navigator.clipboard.writeText(t); $("bCopy").textContent = "¡Copiada!"; } catch (e) { $("bCopy").textContent = "No se pudo copiar"; } setTimeout(() => $("bCopy").textContent = "Copiar lista de conexiones", 1800); };
+for (const id of ["oHint","oBat","oRate","oBuz"]) $(id).addEventListener("change", update);
+window.lab = {connect, clearAll, autoWire, errExample, update, NETS, checklist, setOpt:(o)=>{ for (const [k,v] of Object.entries(o)) $("o"+k).checked = v; update(); }};
+update();
+</script>
+</body>
+</html>
