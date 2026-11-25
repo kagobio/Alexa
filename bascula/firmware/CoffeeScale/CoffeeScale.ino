@@ -428,7 +428,7 @@ void drawMain(uint32_t now) {
   if (target > 0) {
     char b[48];
     snprintf(b, sizeof b, "%.0f > %.0f g   %s-%s", c.dose, target, fmtT(c.tMin).c_str(), fmtT(c.tMax).c_str());
-    txt(b, batPresent ? 262 : 306, 11, TrackerSansRegular12, TXT_DIM, TR_DATUM);
+    txt(b, batPresent ? 226 : 306, 11, TrackerSansRegular12, TXT_DIM, TR_DATUM);
   }
   drawBattery(270, 9, now);
 

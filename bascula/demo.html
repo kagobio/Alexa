@@ -123,6 +123,16 @@
       </div>
 
       <div class="card">
+        <h2>Batería (simulada)</h2>
+        <div class="row" style="align-items:center;gap:14px">
+          <label style="font-size:14px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="batOn" checked> Batería conectada</label>
+          <label style="font-size:14px;display:flex;gap:8px;align-items:center">Nivel <input type="range" id="batLvl" min="0" max="100" value="78" style="width:180px"> <b id="batTxt">78%</b></label>
+          <label style="font-size:14px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="batChg"> Cargando</label>
+        </div>
+        <p class="note">Baja el nivel por debajo del 15 % para ver el icono en rojo y el aviso al móvil. En el aparato real se mide con un divisor de 100 kΩ en el GPIO35. Sin batería conectada, el icono no aparece.</p>
+      </div>
+
+      <div class="card">
         <h2>Simular una preparación</h2>
         <ol class="steps">
           <li>Elige el modo girando el pomo.</li>
@@ -168,8 +178,10 @@ let targetCue = false, targetCueRT = -1e9, reachedAt = 0, startMs = 0, endMs = 0
 let tareG = 0, wf = 0, shown = 0, flow = 0, haveW = false;
 let hist = [], toast = "", toastUntil = 0;
 let menuRow = 0, draft = 0;
-const MENU_ROWS = 11;  // Dosis, Ratio, T min, T max, Parar al peso, Auto inicio, Avisos movil, Wi-Fi, Codigo, Calibrar, Volver
+const MENU_ROWS = 12;  // Dosis, Ratio, T min, T max, Parar, Auto inicio, Avisos movil, Wi-Fi, Codigo, Bateria, Calibrar, Volver
 let notifyOn = true; const TOPIC = "cafe-7f3a9c21e8b04d56";   // código de ejemplo
+// Batería simulada (el aparato real la mide con un divisor en el GPIO35)
+let batPresent = true, batPct = 78, batCharging = false, batLowSent = false;
 
 // ---------- Simulación física ----------
 let cupOn = false, cupMass = 185, liquid = 0;
@@ -296,7 +308,8 @@ function pressKnob() {
     else if (menuRow === 6) { notifyOn = !notifyOn; syncNotifyUI(); }
     else if (menuRow === 7) showToast("Wi-Fi: se configura en el aparato", 2500);
     else if (menuRow === 8) showToast("ntfy: " + TOPIC, 5000);
-    else if (menuRow === 9) { showToast("Calibración: solo en el aparato real", 2500); }
+    else if (menuRow === 9) { /* solo información */ }
+    else if (menuRow === 10) { showToast("Calibración: solo en el aparato real", 2500); }
     else resetToReady();
   } else if (state === "EDIT") {
     if (menuRow === 0) c.dose = draft; else if (menuRow === 1) c.ratio = draft;
@@ -336,6 +349,19 @@ const ease = t => { t = Math.min(1, Math.max(0, t)); return t*t*(3-2*t); };
 function burst() {}   // sin partículas: el aviso de objetivo es un pulso suave
 const GREYTXT = "#9a9a9a";
 
+// Icono de batería (arriba a la derecha): verde > 30 %, naranja 15-30 %, rojo < 15 % (parpadea < 10 %). Rayo si carga.
+function drawBattery(x, y, now) {
+  if (!batPresent) return;
+  const col = batPct > 30 ? "#22dd00" : batPct > 15 ? "#ffa500" : "#f00000";
+  const blink = batPct <= 10 && !batCharging && (Math.floor(now / 500) & 1);
+  if (!blink) {
+    g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); g.roundRect(x, y, 28, 12, 2); g.stroke();
+    g.fillStyle = col; g.fillRect(x + 28, y + 3, 2, 6);
+    const w = Math.max(0, Math.min(24, Math.round(batPct * 24 / 100))); if (w > 0) g.fillRect(x + 2, y + 2, w, 8);
+  }
+  if (batCharging) { g.strokeStyle = "#fff"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x + 16, y + 1); g.lineTo(x + 11, y + 6); g.lineTo(x + 17, y + 6); g.lineTo(x + 12, y + 11); g.stroke(); }
+  text(batPct + "%", x - 5, y - 1, 12, "#8a8a8a", "right", "normal");
+}
 function drawMain(now) {
   const rt = performance.now(), dt = Math.min(0.05, (rt - lastRT) / 1000); lastRT = rt;
   const c = cfg[mode], target = targetG();
@@ -369,7 +395,8 @@ function drawMain(now) {
   // ---- cabecera ----
   const k = ease((rt - modeChangedRT) / 240);
   g.globalAlpha = 0.2 + 0.8 * k; text(c.name, 14 + (1 - k) * 22, 10, 13, "#cfcfcf", "left", "normal"); g.globalAlpha = 1;
-  if (target > 0) text(`${c.dose.toFixed(0)} > ${target.toFixed(0)} g   ${fmtT(c.tMin)}–${fmtT(c.tMax)}`, 306, 11, 12, "#8a8a8a", "right", "normal");
+  if (target > 0) text(`${c.dose.toFixed(0)} > ${target.toFixed(0)} g   ${fmtT(c.tMin)}–${fmtT(c.tMax)}`, batPresent ? 226 : 306, 11, 12, "#8a8a8a", "right", "normal");
+  drawBattery(270, 9, now);
 
   // ---- tiempo (un pequeño salto cada segundo) ----
   const ms = running ? now - startMs : state === "DONE" ? endMs - startMs : 0;
@@ -416,7 +443,7 @@ function drawMain(now) {
     g.fillStyle = `rgba(${colr},${0.12 * (1 - pr)})`; g.fillRect(0, 0, 320, 172);
   }
 }
-function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Parar","Auto inicio","Avisos movil","Wi-Fi","Codigo","Calibrar","Volver"][r]; }
+function menuLabel(r) { return ["Dosis","Ratio","Tiempo min","Tiempo max","Parar","Auto inicio","Avisos movil","Wi-Fi","Codigo","Bateria","Calibrar","Volver"][r]; }
 function menuValue(r) {
   const c = cfg[mode], ed = state === "EDIT" && r === menuRow;
   switch (r) {
@@ -429,6 +456,7 @@ function menuValue(r) {
     case 6: return notifyOn ? "SI" : "NO";
     case 7: return "conectado";
     case 8: return TOPIC;
+    case 9: return batPresent ? `${batPct}% ${(3.3 + 0.9 * batPct / 100).toFixed(2)}V` : "sin bateria";
     default: return "";
   }
 }
@@ -464,6 +492,7 @@ function loop(ts) {
   const steps = Math.max(1, Math.round(speed));       // sub-pasos para mantener la lógica estable
   const dt = real * speed / steps;
   for (let i = 0; i < steps; i++) { simNow += dt; stepScenario(dt); updateWeight(dt); brewLogic(); autoStep(); }
+  batteryTick();
   draw();
   requestAnimationFrame(loop);
 }
@@ -538,6 +567,20 @@ function targetNotice() {
   const ph = document.getElementById("phone"); ph.classList.add("show");
   clearTimeout(phoneTimer); phoneTimer = setTimeout(() => ph.classList.remove("show"), 6000);
 }
+function batteryTick() {
+  if (!batPresent) { batLowSent = false; return; }
+  if (batPct <= 15 && !batCharging && !batLowSent) {
+    batLowSent = true;
+    if (state === "READY" || state === "DONE") showToast("Bateria baja", 3000);
+    if (notifyOn) {
+      document.getElementById("phTitle").textContent = "Bateria baja";
+      document.getElementById("phBody").textContent = `${batPct} % (${(3.3 + 0.9 * batPct / 100).toFixed(2)} V). Conecta el cargador.`;
+      const ph = document.getElementById("phone"); ph.classList.add("show");
+      clearTimeout(phoneTimer); phoneTimer = setTimeout(() => ph.classList.remove("show"), 6000);
+    }
+  }
+  if (batPct >= 25 || batCharging) batLowSent = false;
+}
 function phoneNotice() {
   if (!notifyOn) return;
   const c = cfg[mode], sec = Math.floor((endMs - startMs) / 1000), tg = targetG();
@@ -547,6 +590,9 @@ function phoneNotice() {
   const ph = document.getElementById("phone"); ph.classList.add("show");
   clearTimeout(phoneTimer); phoneTimer = setTimeout(() => ph.classList.remove("show"), 6000);
 }
+const batOn = document.getElementById("batOn"), batLvl = document.getElementById("batLvl"), batChg = document.getElementById("batChg"), batTxt = document.getElementById("batTxt");
+function syncBat() { batPresent = batOn.checked; batPct = +batLvl.value; batCharging = batChg.checked && batPresent; batTxt.textContent = batPct + "%"; }
+for (const el of [batOn, batLvl, batChg]) el.addEventListener("input", syncBat);
 setStatus("Listo.");
 (document.fonts && document.fonts.load ? document.fonts.load('110px "Jersey 10"') : Promise.resolve()).catch(()=>{}).finally(() => requestAnimationFrame(loop));
 </script>
