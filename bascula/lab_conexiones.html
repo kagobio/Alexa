@@ -33,6 +33,20 @@
   canvas#scr { width:100%; max-width:380px; background:#000; border-radius:8px; display:block; }
   .term { cursor:pointer; } .term circle { transition: r .1s; } .term:hover circle { r:9; }
   .wire { cursor:pointer; } .wire:hover path.vis { stroke-width:8; }
+  .badge circle { fill:#fff; stroke:#222; stroke-width:2.5; } .badge text { font-weight:800; font-size:15px; fill:#111; text-anchor:middle; pointer-events:none; }
+  #plan { display:none; margin-top:14px; } #plan.on { display:block; }
+  #plan h3 { font-size:15px; margin:14px 0 6px; } #plan table { width:100%; border-collapse:collapse; font-size:13.5px; background:#fff; }
+  #plan th, #plan td { border:1px solid #ddd; padding:4px 8px; text-align:left; vertical-align:top; } #plan th { background:#f1ede4; }
+  #plan tr.ph td { background:#2b2b2b; color:#fff; font-weight:700; }
+  .sw { display:inline-block; width:34px; height:9px; border-radius:5px; vertical-align:middle; margin-right:6px; border:1px solid rgba(0,0,0,.35); }
+  #plan ol, #plan ul { margin:4px 0 4px 18px; padding:0; line-height:1.55; font-size:14px; }
+  @media print {
+    @page { size: A3 landscape; margin: 8mm; }
+    .bar, .hint, .grid, p.sub, .noprint { display:none !important; } body { background:#fff; }
+    main { max-width:none; padding:0; } h1 { font-size:20px; margin:0 0 4px; }
+    .board { box-shadow:none; text-align:center; } .board svg { height: 250mm; width:auto; margin:0 auto; }
+    #plan { display:block !important; break-before: page; } #plan .card { box-shadow:none; padding:0; } #plan tr { break-inside: avoid; }
+  }
   text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
 </style>
 </head>
@@ -46,6 +60,7 @@
     <button class="t" id="bErr">Ejemplo con errores</button>
     <button class="t" id="bClear">Borrar cables</button>
     <button class="t" id="bCopy">Copiar lista de conexiones</button>
+    <button class="t" id="bPlan">Plano numerado</button>
     <span style="flex:1"></span>
     <label class="chk"><input type="checkbox" id="oHint" checked> Pistas</label>
     <label class="chk"><input type="checkbox" id="oBat" checked> Batería</label>
@@ -62,7 +77,8 @@
       <h2 style="margin-top:12px">Pantalla</h2><canvas id="scr" width="320" height="172"></canvas>
       <div class="hint" id="scrNote"></div></div>
   </div>
-  <div class="card" style="margin-top:14px"><h2>Falta o sobra</h2><div id="missing"></div></div>
+  <div class="card noprint" style="margin-top:14px"><h2>Falta o sobra</h2><div id="missing"></div></div>
+  <div id="plan"></div>
 </main>
 
 <script>
@@ -156,6 +172,7 @@ for (const [nid,n] of Object.entries(NETS)) for (const t of n.t) expectedNet[t] 
 // ======================= ESTADO: CABLES =======================
 let wires = [];           // {a: "key@..", b: "key@..", id}
 let sel = null;           // clave de terminal seleccionada
+let showNums = false;     // plano numerado
 const keys = Object.keys(term);
 const idOf = k => term[k].id;
 function addWire(ka, kb) {
@@ -226,6 +243,51 @@ function powerStatus(A) {
 }
 
 const $ = id => document.getElementById(id);
+// ======================= PLANO NUMERADO =======================
+const PHASES = [
+  {t:"A · Alimentación y masas", nets:["USB5","3V3","GND","5V"]},
+  {t:"B · HX711 y celda de carga", nets:["DT","SCK","RATE","E+","E-","A-","A+"]},
+  {t:"C · Pantalla", nets:["SCLK","MOSI","CS","DC","RST","BLK"]},
+  {t:"D · Encoder y botón", nets:["ENC_A","ENC_B","ENC_SW","BTN"]},
+  {t:"E · Batería y medida de nivel", nets:["LIPO+","LIPO-","ADC"]},
+  {t:"F · Zumbador", nets:["BUZ"]},
+  {t:"X · Cables que no están en el plano del firmware", nets:[]},
+];
+const NOTES = {
+  "USB5":"Cable USB-C del ordenador o del cargador de 5 V. Sirve para alimentar y programar.",
+  "3V3":"Un solo pin de 3,3 V del ESP32 reparte a 3 placas: usa una regleta o suelda en estrella.",
+  "GND":"Masa común. El ESP32 tiene varios pines GND: reparte los cables entre ellos.",
+  "5V":"Solo con batería: salida de 5 V del módulo al pin VIN. No lo conectes junto al USB del PC sin diodo.",
+  "DT":"Datos del HX711.","SCK":"Reloj del HX711.","RATE":"Opcional (80 lecturas/s): antes hay que cortar la pista RATE→GND del módulo.",
+  "E+":"Excitación de la celda. Los colores varían: confírmalos con el polímetro.","E-":"Excitación de la celda.","A-":"Señal de la celda.","A+":"Señal de la celda.",
+  "SCLK":"Reloj SPI.","MOSI":"Datos SPI.","CS":"Selección de chip.","DC":"Datos/comando.","RST":"Reinicio de la pantalla.","BLK":"Luz de la pantalla (PWM).",
+  "ENC_A":"Cuando gira el pomo.","ENC_B":"Cuando gira el pomo.","ENC_SW":"Pulsador del pomo.","BTN":"El otro pin del botón va a GND.",
+  "LIPO+":"Batería con protección. Comprueba la polaridad antes de conectar.","LIPO-":"Batería con protección.",
+  "ADC":"Divisor 100 kΩ + 100 kΩ desde B+ y 100 nF a GND: el nivel llega a GPIO35 como la mitad de la tensión.",
+  "BUZ":"Zumbador pasivo. El otro pin va a GND.",
+};
+function planOrder() {
+  const rows = wires.map((w,i) => { const na = expectedNet[idOf(w.a)], nb = expectedNet[idOf(w.b)]; const net = (na && na===nb) ? na : null;
+    let ph = PHASES.length-1, ni = 99; if (net) PHASES.forEach((P,pi) => { const k = P.nets.indexOf(net); if (k>=0) { ph = pi; ni = k; } });
+    const esp = idOf(w.a).startsWith("esp.") || idOf(w.a).startsWith("usb.") ? [w.a,w.b] : (idOf(w.b).startsWith("esp.") || idOf(w.b).startsWith("usb.") ? [w.b,w.a] : [w.a,w.b]);
+    return {w,i,net,ph,ni,from:esp[0],to:esp[1]}; });
+  rows.sort((x,y) => x.ph-y.ph || x.ni-y.ni || x.i-y.i); rows.forEach((r,n) => r.n = n+1); return rows;
+}
+function renderPlan() {
+  const box = $("plan"); box.classList.toggle("on", showNums); if (!showNums) { box.innerHTML = ""; return; }
+  const rows = planOrder(); const colName = {"#d62d2d":"rojo","#1a1a1a":"negro","#e8590c":"naranja","#e64980":"rosa","#c92a2a":"rojo","#343a40":"negro","#2f9e44":"verde","#e8b100":"amarillo","#868e96":"gris","#adb5bd":"blanco","#8e44ad":"morado","#e67e22":"naranja","#12a79d":"turquesa","#1c7ed6":"azul"};
+  let h = `<div class="card"><h2>Plano de cableado: ${rows.length} cables</h2>`;
+  h += `<h3>Antes de empezar</h3><ul><li>Monta todo <b>sin alimentación</b>: ni USB ni batería conectados.</li><li>Mide la celda con el polímetro: entre E+ y E− y entre A+ y A− debe haber unos cientos de ohmios a pocos kΩ (varía según el modelo). Si no hay lectura, el hilo está cortado.</li><li>Los hilos de 3,3 V y de masa se juntan en varios puntos: empalma con una regleta o suelda en estrella.</li></ul>`;
+  h += `<h3>Tabla de cables (en orden de montaje)</h3><table><tr><th>#</th><th>Hilo</th><th>Desde</th><th>Hasta</th><th>Nota</th></tr>`;
+  let lastPh = -1;
+  for (const r of rows) {
+    if (r.ph !== lastPh) { lastPh = r.ph; h += `<tr class="ph"><td colspan="5">${PHASES[r.ph].t}</td></tr>`; }
+    const col = r.net ? (WIRE_COL[r.net]||"#555") : "#d62d2d";
+    h += `<tr><td><b>${r.n}</b></td><td><span class="sw" style="background:${col}"></span>${r.net ? (colName[col]||"") : "revisar"}</td><td>${niceName(idOf(r.from))}</td><td>${niceName(idOf(r.to))}</td><td>${r.net ? (NOTES[r.net]||"") : "Este cable no está en el firmware."}</td></tr>`;
+  }
+  h += `</table><h3>Antes de dar corriente</h3><ol><li>Con el polímetro en continuidad: <b>no debe sonar</b> entre 3V3 y GND, ni entre VIN y GND, ni entre B+ y B− de la batería.</li><li>Revisa que ningún cable de 5 V o de batería toque un pin de señal.</li><li>Conecta <b>solo el USB</b> (sin batería): debe encenderse la pantalla. Después añade la celda y comprueba el peso, luego la batería.</li><li>Calibra con una pesa conocida de 100–500 g.</li></ol></div>`;
+  box.innerHTML = h;
+}
 // ======================= DIBUJO =======================
 const svg = document.getElementById("svg"); const NS = "http://www.w3.org/2000/svg";
 function el(tag, attrs, parent, text) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text!=null) e.textContent = text; (parent||svg).appendChild(e); return e; }
@@ -380,10 +442,17 @@ function render() {
   wires.forEach((w,i) => {
     const col = wireColor(w); const g = el("g",{class:"wire"}); const d = wirePath(w);
     el("path",{d,fill:"none",stroke:"transparent","stroke-width":18},g);
-    el("path",{class:"vis",d,fill:"none",stroke:col||"#d62d2d","stroke-width":5,"stroke-linecap":"round","stroke-dasharray":col?"0":"9 7",filter:"url(#fWire)"},g);
+    el("path",{d,fill:"none",stroke:"#000","stroke-width":6.5,"stroke-linecap":"round",opacity:.22,transform:"translate(1.5,3)","pointer-events":"none"},g);
+    el("path",{class:"vis",d,fill:"none",stroke:col||"#d62d2d","stroke-width":5,"stroke-linecap":"round","stroke-dasharray":col?"0":"9 7"},g);
     el("path",{d,fill:"none",stroke:"#fff","stroke-width":1.4,"stroke-linecap":"round",opacity:.28,transform:"translate(0,-1.2)","pointer-events":"none"},g);
     g.addEventListener("click", () => { wires.splice(i,1); update(); });
   });
+  if (showNums) for (const r of planOrder()) {
+    const tmp = el("path",{d:wirePath({a:r.to,b:r.from}),fill:"none"}); const L = tmp.getTotalLength();
+    const toIsPeriph = !(idOf(r.to).startsWith("esp.") || idOf(r.to).startsWith("usb.")), fromIsEsp = idOf(r.from).startsWith("esp.") || idOf(r.from).startsWith("usb.");
+    const pt = (toIsPeriph && fromIsEsp && L > 220) ? tmp.getPointAtLength(55 + (r.n % 3) * 22) : tmp.getPointAtLength(L * 0.5); tmp.remove();
+    const b = el("g",{class:"badge",transform:`translate(${pt.x},${pt.y})`}); el("circle",{r:12},b); el("text",{y:5},b,String(r.n));
+  }
   // terminales: pines dorados, con etiqueta serigrafiada
   const hint = $("oHint").checked; let valid = new Set();
   if (sel && hint) { const nid = expectedNet[idOf(sel)]; if (nid) for (const t of NETS[nid].t) valid.add(t); }
@@ -452,6 +521,7 @@ function update() {
     cv.fillStyle = "#222"; cv.font = "16px system-ui"; cv.textAlign = "center"; cv.fillText("sin señal", 160, 90);
     $("scrNote").textContent = powered ? "La pantalla no está bien cableada: queda en negro (o con la luz encendida y vacía)." : "Sin alimentación.";
   }
+  renderPlan();
   window.__state = {parts:st, dangers:A.dangers, conflicts:A.conflicts, powered, wires:wires.length};
 }
 // ======================= ACCIONES =======================
@@ -495,10 +565,11 @@ function checklist() {
   out.push("", "Antes de dar corriente: comprueba con el polímetro que NO hay continuidad entre 3V3 y GND, ni entre VIN y GND.");
   return out.join("\n");
 }
+$("bPlan").onclick = () => { showNums = !showNums; if (showNums && wires.length === 0) autoWire(); else update(); $("bPlan").textContent = showNums ? "Ocultar plano" : "Plano numerado"; };
 $("bAuto").onclick = autoWire; $("bClear").onclick = clearAll; $("bErr").onclick = errExample;
 $("bCopy").onclick = async () => { const t = checklist(); try { await navigator.clipboard.writeText(t); $("bCopy").textContent = "¡Copiada!"; } catch (e) { $("bCopy").textContent = "No se pudo copiar"; } setTimeout(() => $("bCopy").textContent = "Copiar lista de conexiones", 1800); };
 for (const id of ["oHint","oBat","oRate","oBuz"]) $(id).addEventListener("change", update);
-window.lab = {connect, clearAll, autoWire, errExample, update, NETS, checklist, setOpt:(o)=>{ for (const [k,v] of Object.entries(o)) $("o"+k).checked = v; update(); }};
+window.lab = {plan:(on)=>{ showNums = on; update(); }, planOrder, connect, clearAll, autoWire, errExample, update, NETS, checklist, setOpt:(o)=>{ for (const [k,v] of Object.entries(o)) $("o"+k).checked = v; update(); }};
 update();
 </script>
 </body>
