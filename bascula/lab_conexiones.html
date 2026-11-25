@@ -53,7 +53,7 @@
     <label class="chk"><input type="checkbox" id="oBuz"> Zumbador</label>
   </div>
 
-  <div class="board"><svg id="svg" viewBox="0 0 1400 1120" role="img" aria-label="Placas y terminales para cablear"></svg></div>
+  <div class="board"><svg id="svg" viewBox="0 0 1400 1140" role="img" aria-label="Placas y terminales para cablear"></svg></div>
   <div class="hint">El orden de los pines del ESP32 es orientativo: sigue los nombres impresos en <i>tu</i> placa. Los pines de 3,3 V, GND y VIN/5 V son siempre el mismo punto eléctrico aunque tu placa los repita.</div>
 
   <div class="grid">
@@ -114,32 +114,32 @@ const WIRE_COL = {"3V3":"#d62d2d","GND":"#1a1a1a","5V":"#e8590c","USB5":"#e64980
   "E+":"#d62d2d","E-":"#1a1a1a","A-":"#adb5bd","A+":"#2f9e44","SCLK":"#8e44ad","MOSI":"#8e44ad","CS":"#8e44ad","DC":"#8e44ad","RST":"#8e44ad","BLK":"#e67e22",
   "ENC_A":"#12a79d","ENC_B":"#12a79d","ENC_SW":"#12a79d","BTN":"#1c7ed6","ADC":"#12a79d","BUZ":"#e64980"};
 const comps = {};
-function C(id,title,x,y,w,h,color,terms) { comps[id] = {id,title,x,y,w,h,color,terms}; }
-// terms: [label, side(L/R/T/B), position(px a lo largo del lado)]
+function C(id,title,x,y,w,h,color,terms,inset=14) { comps[id] = {id,title,x,y,w,h,color,terms,inset}; }
+// terms: [label, side(L/R/T/B), position(px a lo largo del lado), etiqueta opcional]
 const espL = ["3V3","GPIO13","GPIO35","GPIO32","GPIO33","GPIO25","GPIO26","GPIO27","GPIO14","GPIO12","GND","VIN","EN","GPIO36","GPIO39","GPIO34"];
 const espR = ["GND","GPIO23","GPIO22","GPIO21","GPIO19","GPIO18","GPIO5","GPIO17","GPIO16","GPIO4","GPIO0","GPIO2","GPIO15","GND","TX0","RX0"];
 const espT = [];
-espL.forEach((n,i)=>espT.push([n,"L",120+i*46,n]));
-espR.forEach((n,i)=>espT.push([n,"R",120+i*46,n]));
-espT.push(["USB","B",140,"USB-C"]);
-C("esp","ESP32-WROOM-32D (DevKit)",560,70,280,830,"#e8f4ec",espT);
-C("hx","HX711",60,70,250,300,"#fff",[["VCC","R",130],["GND","R",172],["DT","R",214],["SCK","R",256],["RATE","R",298],["E+","B",40],["E-","B",100],["A-","B",160],["A+","B",220]]);
-C("cell","Celda de carga 5 kg",60,470,250,100,"#fff",[["E+","T",40],["E-","T",100],["A-","T",160],["A+","T",220]]);
-C("disp",'Pantalla DFRobot 1.47"',1090,70,250,420,"#fff",[["VCC","L",120],["GND","L",160],["SCLK","L",200],["MOSI","L",240],["CS","L",280],["DC","L",320],["RST","L",360],["BLK","L",400]]);
-C("enc","Encoder KY-040",1090,540,250,230,"#fff",[["CLK","L",120],["DT","L",160],["SW","L",200],["+","L",200+40],["GND","L",200+80]]);
-C("btn","Botón MX (azul)",1090,820,250,110,"#fff",[["1","L",70],["2","L",100]]);
-C("buz","Zumbador pasivo",60,640,250,100,"#fff",[["+","R",60],["-","R",90]]);
-C("lipo","LiPo 1S 3,7 V",60,850,170,100,"#eaf4ff",[["+","R",50],["-","R",80]]);
-C("chg","Carga + elevador 5 V",290,820,250,160,"#eaf4ff",[["B+","L",60],["B-","L",100],["OUT+","R",60],["OUT-","R",100]]);
-C("div","Divisor 100k / 100k (+100 nF)",290,1000,250,100,"#eaf4ff",[["IN","L",50],["MID","R",40],["GND","R",76]]);
-C("usb","Fuente USB-C 5 V",640,1010,170,90,"#fff0f4",[["5V","T",85]]);
+espL.forEach((n,i)=>espT.push([n,"L",130+i*38,n]));
+espR.forEach((n,i)=>espT.push([n,"R",130+i*38,n]));
+espT.push(["USB","B",170,"USB-C"]);
+C("esp","ESP32-WROOM-32D (DevKit)",530,40,340,760,"#16161c",espT,17);
+C("hx","HX711",60,60,250,280,"#1b7f3a",[["VCC","R",50],["GND","R",90],["DT","R",130],["SCK","R",170],["RATE","R",210],["E+","B",40],["E-","B",95],["A-","B",150],["A+","B",205]],15);
+C("cell","Celda de carga 5 kg",60,470,250,120,"#aab2bb",[["E+","T",40],["E-","T",95],["A-","T",150],["A+","T",205]],14);
+C("disp",'Pantalla DFRobot 1.47"',1090,60,250,440,"#0f0f13",[["VCC","L",100],["GND","L",140],["SCLK","L",180],["MOSI","L",220],["CS","L",260],["DC","L",300],["RST","L",340],["BLK","L",380]],15);
+C("enc","Encoder KY-040",1090,540,250,230,"#243a73",[["CLK","L",55],["DT","L",95],["SW","L",135],["+","L",175],["GND","L",215]],15);
+C("btn","Botón MX (azul)",1090,820,250,110,"#e9ecef",[["1","L",40],["2","L",80]],15);
+C("buz","Zumbador pasivo",60,640,250,110,"#222",[["+","R",40],["-","R",80]],15);
+C("lipo","LiPo 1S 3,7 V",60,850,215,110,"#6f93cc",[["+","R",40],["-","R",75]],14);
+C("chg","Carga + elevador 5 V",305,820,250,160,"#1f5fbf",[["B+","L",70],["B-","L",110],["OUT+","R",70],["OUT-","R",110]],15);
+C("div","Divisor 100k / 100k (+100 nF)",305,1030,250,90,"#c9a66b",[["IN","L",40],["MID","R",30],["GND","R",62]],15);
+C("usb","Fuente USB-C 5 V",615,1010,170,90,"#f1f3f5",[["5V","T",85]],14);
 
 const term = {};   // id -> {x,y,comp,label}
 for (const c of Object.values(comps)) for (const [label,side,pos,disp] of c.terms) {
   let id = c.id + "." + label; if (c.id==="esp" && (label==="GND")) id = "esp.GND";
   if (c.id==="esp" && label==="VIN") id = "esp.VIN";
   if (c.id==="esp" && /^GPIO/.test(label)) id = "esp." + label;
-  let x,y; if (side==="L"){x=c.x;y=c.y+pos;} else if (side==="R"){x=c.x+c.w;y=c.y+pos;} else if (side==="T"){x=c.x+pos;y=c.y;} else {x=c.x+pos;y=c.y+c.h;}
+  const ins = c.inset; let x,y; if (side==="L"){x=c.x+ins;y=c.y+pos;} else if (side==="R"){x=c.x+c.w-ins;y=c.y+pos;} else if (side==="T"){x=c.x+pos;y=c.y+ins;} else {x=c.x+pos;y=c.y+c.h-ins;}
   const key = id + "@" + Object.keys(term).length;     // GND y 3V3 repetidos: mismo id eléctrico, otra posición
   term[key] = {id,x,y,side,label:disp||label,comp:c.id};
 }
@@ -225,56 +225,187 @@ function powerStatus(A) {
   return {s:"none", t:"sin alimentación: conecta el USB-C o la batería", usb, bat};
 }
 
+const $ = id => document.getElementById(id);
 // ======================= DIBUJO =======================
 const svg = document.getElementById("svg"); const NS = "http://www.w3.org/2000/svg";
 function el(tag, attrs, parent, text) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text!=null) e.textContent = text; (parent||svg).appendChild(e); return e; }
 function wireColor(w) { const na = expectedNet[idOf(w.a)], nb = expectedNet[idOf(w.b)]; return (na && na===nb) ? (WIRE_COL[na]||"#555") : null; }
 function wirePath(w) {
   const a = term[w.a], b = term[w.b]; const dir = s => s==="L"?-1:s==="R"?1:0, dv = s => s==="T"?-1:s==="B"?1:0;
-  const k = Math.min(160, Math.hypot(a.x-b.x, a.y-b.y)/2 + 30);
-  return `M${a.x},${a.y} C${a.x+dir(a.side)*k},${a.y+dv(a.side)*k} ${b.x+dir(b.side)*k},${b.y+dv(b.side)*k} ${b.x},${b.y}`;
+  const d = Math.hypot(a.x-b.x, a.y-b.y); const k = Math.min(170, d/2 + 30), sag = Math.min(40, d/8);
+  return `M${a.x},${a.y} C${a.x+dir(a.side)*k},${a.y+dv(a.side)*k+sag} ${b.x+dir(b.side)*k},${b.y+dv(b.side)*k+sag} ${b.x},${b.y}`;
 }
+function defs() {
+  const d = el("defs",{});
+  const lg = (id,stops,x2="0",y2="1") => { const g = el("linearGradient",{id,x1:"0",y1:"0",x2,y2},d); stops.forEach(([o,c]) => el("stop",{offset:o,"stop-color":c},g)); };
+  lg("gPcbG",[[0,"#23a050"],[1,"#146a33"]]); lg("gPcbB",[[0,"#2a74d6"],[1,"#164a9a"]]); lg("gPcbK",[[0,"#26262e"],[1,"#101014"]]);
+  lg("gPcbN",[[0,"#34508f"],[1,"#1d2f63"]]); lg("gMetal",[[0,"#e3e6ea"],[.5,"#b3b8bf"],[1,"#8c929a"]]); lg("gAlu",[[0,"#e9edf1"],[.45,"#bfc6ce"],[1,"#8f98a2"]],"0","1");
+  lg("gPouch",[[0,"#9db6dd"],[1,"#5f86c4"]]); lg("gGlass",[[0,"#16233a"],[.5,"#0a0f1a"],[1,"#05070c"]],"1","1"); lg("gPerf",[[0,"#d9b77a"],[1,"#bc9658"]]);
+  lg("gBlack",[[0,"#3a3a3f"],[1,"#0b0b0d"]]); lg("gWhite",[[0,"#ffffff"],[1,"#d9dde2"]]); lg("gGold",[[0,"#f2d37a"],[1,"#b88a1e"]]);
+  const f = el("filter",{id:"fShadow",x:"-10%",y:"-10%",width:"130%",height:"140%"},d);
+  el("feDropShadow",{dx:"0",dy:"4",stdDeviation:"5","flood-color":"#000","flood-opacity":".28"},f);
+  const f2 = el("filter",{id:"fWire",x:"-20%",y:"-20%",width:"140%",height:"140%"},d);
+  el("feDropShadow",{dx:"1.5",dy:"3",stdDeviation:"2","flood-color":"#000","flood-opacity":".35"},f2);
+}
+const R = (g,x,y,w,h,fill,extra={}) => el("rect",Object.assign({x,y,width:w,height:h,fill},extra),g);
+const Ci = (g,cx,cy,r,fill,extra={}) => el("circle",Object.assign({cx,cy,r,fill},extra),g);
+const Tx = (g,x,y,t,size=11,fill="#fff",extra={}) => el("text",Object.assign({x,y,"font-size":size,fill,"text-anchor":"middle","font-weight":"600"},extra),g,t);
+function smd(g,x,y,w=14,h=8) { R(g,x,y,w,h,"#cfc5a8",{rx:1.5,stroke:"#8d8465","stroke-width":.8}); R(g,x,y,3,h,"#9aa0a6"); R(g,x+w-3,y,3,h,"#9aa0a6"); }
+function resistor(g,x,y,len,bands) { // resistencia axial
+  R(g,x,y+3,len,2,"#bbb"); R(g,x+len*.15,y-2,len*.7,12,"#d9c9a0",{rx:6,stroke:"#a89a72","stroke-width":1});
+  bands.forEach((c,i) => R(g,x+len*.28+i*7,y-2,3.5,12,c)); }
+const ART = {
+  esp(c,g) {
+    const cx = c.x + c.w/2;
+    R(g,c.x,c.y,c.w,c.h,"url(#gPcbK)",{rx:12,stroke:"#050507","stroke-width":2,filter:"url(#fShadow)"});
+    R(g,c.x+4,c.y+105,30,c.h-120,"#0c0c0e",{rx:3}); R(g,c.x+c.w-34,c.y+105,30,c.h-120,"#0c0c0e",{rx:3});        // tiras de pines
+    // antena (meandro)
+    R(g,cx-70,c.y+16,140,72,"#2b2219",{rx:3});
+    let d = `M${cx-60},${c.y+72}`; for (let i=0;i<5;i++) d += ` l0,-44 l12,0 l0,44 l12,0`; el("path",{d,fill:"none",stroke:"#c9a24a","stroke-width":3,"stroke-linejoin":"round"},g);
+    // módulo metálico (entre las columnas de etiquetas)
+    R(g,cx-70,c.y+92,140,200,"url(#gMetal)",{rx:4,stroke:"#6e747c","stroke-width":1.5});
+    for (let i=0;i<6;i++) R(g,cx-62,c.y+100+i*2.5,124,1,"#fff",{opacity:.35});
+    Tx(g,cx,c.y+186,"ESP32-WROOM-32D",12.5,"#2a2d31",{"font-weight":"700"}); Tx(g,cx,c.y+204,"2.4 GHz Wi-Fi + BT",9,"#555"); Tx(g,cx,c.y+218,"Espressif",9,"#555");
+    R(g,cx+26,c.y+260,32,22,"#2a2d31",{rx:2,opacity:.14});
+    // chip USB-UART, regulador, LED, pasivos (también entre las columnas)
+    R(g,cx-26,c.y+360,46,46,"#08080a",{rx:3,stroke:"#333"}); Ci(g,cx-18,c.y+368,3,"#777"); for (let i=0;i<7;i++) { R(g,cx-30,c.y+364+i*6,5,2.5,"#aaa"); R(g,cx+19,c.y+364+i*6,5,2.5,"#aaa"); }
+    Tx(g,cx-3,c.y+388,"CP2102",8,"#aaa");
+    R(g,cx-20,c.y+440,40,32,"#08080a",{rx:2}); R(g,cx-14,c.y+470,10,8,"#aaa"); R(g,cx+4,c.y+470,10,8,"#aaa"); R(g,cx-18,c.y+420,36,12,"#aaa",{rx:2});
+    Ci(g,cx+36,c.y+318,5,"#ff2a2a"); Ci(g,cx+36,c.y+318,9,"#ff2a2a",{opacity:.25});
+    for (let i=0;i<4;i++) smd(g,cx-50+i*22,c.y+332+(i%2)*14); for (let i=0;i<3;i++) smd(g,cx+40,c.y+400+i*12,12,7);
+    // botones EN y BOOT
+    [[cx-52,"EN"],[cx+20,"BOOT"]].forEach(([bx,t]) => { R(g,bx,c.y+560,32,32,"#8b8f96",{rx:3,stroke:"#555"}); Ci(g,bx+16,c.y+576,10,"url(#gMetal)",{stroke:"#444"}); Tx(g,bx+16,c.y+610,t,10); });
+    // conector USB-C
+    R(g,cx-48,c.y+c.h-34,96,42,"url(#gMetal)",{rx:8,stroke:"#555","stroke-width":1.5}); R(g,cx-30,c.y+c.h-12,60,10,"#0b0b0d",{rx:5});
+    Tx(g,cx,c.y+650,"ESP32 DevKit",11,"#bbb",{"font-weight":"500"});
+  },
+  hx(c,g) {
+    R(g,c.x,c.y,c.w,c.h,"url(#gPcbG)",{rx:10,stroke:"#0d4a22","stroke-width":2,filter:"url(#fShadow)"});
+    for (let i=0;i<4;i++) Ci(g,c.x+16+(i%2)*(c.w-32),c.y+16+Math.floor(i/2)*(c.h-32),7,"#e8e8c8",{stroke:"#999"});     // taladros
+    R(g,c.x+c.w-32,c.y+28,24,200,"#0c0c0e",{rx:3});                                                                  // tira de pines
+    // chip HX711 SOP-16
+    R(g,c.x+70,c.y+95,100,60,"#0b0b0d",{rx:2}); for (let i=0;i<8;i++) { R(g,c.x+76+i*11,c.y+88,5,8,"#c9c9c9"); R(g,c.x+76+i*11,c.y+154,5,8,"#c9c9c9"); }
+    Ci(g,c.x+80,c.y+105,3,"#777"); Tx(g,c.x+120,c.y+130,"HX711",15,"#d0d0d0",{"font-weight":"700"});
+    resistor(g,c.x+40,c.y+190,50,["#a52a2a","#000","#ff8c00"]); resistor(g,c.x+110,c.y+190,50,["#a52a2a","#000","#ff8c00"]);
+    R(g,c.x+40,c.y+55,40,18,"#d9a40a",{rx:3,stroke:"#8a6a05"}); smd(g,c.x+100,c.y+50); smd(g,c.x+130,c.y+50);
+    Tx(g,c.x+110,c.y+36,"24-bit ADC",10,"#bfe5c9");
+    // pads inferiores
+    R(g,c.x+10,c.y+c.h-34,c.w-90,28,"#0e5a2b",{rx:4});
+  },
+  cell(c,g) {
+    // barra de aluminio
+    R(g,c.x,c.y+50,c.w,60,"url(#gAlu)",{rx:6,stroke:"#6b747e","stroke-width":2,filter:"url(#fShadow)"});
+    [28,62].forEach(dx => Ci(g,c.x+dx,c.y+80,9,"#6a7480",{stroke:"#444"})); [c.w-62,c.w-28].forEach(dx => Ci(g,c.x+dx,c.y+80,6.5,"#6a7480",{stroke:"#444"}));
+    R(g,c.x+92,c.y+62,70,36,"#d9d9d9",{rx:5,stroke:"#999"}); R(g,c.x+100,c.y+70,54,20,"#9a7b4f",{rx:3,opacity:.85});     // galga con resina
+    Tx(g,c.x+127,c.y+84,"5kg",11,"#fff",{"font-weight":"700"});
+    // hilos de colores que salen hacia los terminales
+    const ends = ["E+","E-","A-","A+"].map(l => term[keyFor("cell."+l)]); const cols = ["#d62d2d","#1a1a1a","#f1f1f1","#2f9e44"];
+    ends.forEach((t,i) => el("path",{d:`M${c.x+170},${c.y+62} C${c.x+170+i*3},${c.y+30} ${t.x},${t.y+40} ${t.x},${t.y}`,fill:"none",stroke:"#000","stroke-width":5.5,opacity:.25,"stroke-linecap":"round",transform:"translate(1,2)"},g) && el("path",{d:`M${c.x+170},${c.y+62} C${c.x+170+i*3},${c.y+30} ${t.x},${t.y+40} ${t.x},${t.y}`,fill:"none",stroke:cols[i],"stroke-width":4,"stroke-linecap":"round"},g));
+  },
+  disp(c,g) {
+    R(g,c.x,c.y,c.w,c.h,"url(#gPcbK)",{rx:12,stroke:"#000","stroke-width":2,filter:"url(#fShadow)"});
+    R(g,c.x+4,c.y+80,32,330,"#0a0a0c",{rx:3});                                                          // tira de pines
+    R(g,c.x+58,c.y+18,c.w-72,c.h-36,"#050608",{rx:10,stroke:"#222","stroke-width":2});                  // marco
+    R(g,c.x+68,c.y+28,c.w-92,c.h-56,"url(#gGlass)",{rx:7});                                              // cristal
+    el("path",{d:`M${c.x+68},${c.y+28} L${c.x+c.w-24},${c.y+28} L${c.x+68},${c.y+c.h/2} Z`,fill:"#fff",opacity:.07},g);   // reflejo
+    // imagen apagada: una pista de la pantalla real
+    Tx(g,c.x+(c.w+34)/2,c.y+c.h/2,"1.47\" IPS",15,"#3d4a63",{"font-weight":"500",transform:`rotate(-90 ${c.x+(c.w+34)/2} ${c.y+c.h/2})`});
+    R(g,c.x+c.w-18,c.y+c.h/2-20,10,40,"#d9c28a",{rx:2});                                                // cinta flexible
+    Tx(g,c.x+c.w-90,c.y+c.h-8,"DFR0995 · ST7789",9,"#667");
+  },
+  enc(c,g) {
+    R(g,c.x,c.y,c.w,c.h,"url(#gPcbN)",{rx:12,stroke:"#101a3a","stroke-width":2,filter:"url(#fShadow)"});
+    R(g,c.x+4,c.y+30,30,190,"#0a0a0c",{rx:3});
+    R(g,c.x+112,c.y+70,100,90,"url(#gMetal)",{rx:6,stroke:"#555"});                                     // cuerpo del encoder
+    Ci(g,c.x+180,c.y+115,38,"url(#gBlack)",{stroke:"#000","stroke-width":2});                              // pomo
+    for (let i=0;i<20;i++) { const a = i*Math.PI/10; R(g,c.x+180+Math.cos(a)*35-1.5,c.y+115+Math.sin(a)*35-3,3,6,"#555",{transform:`rotate(${i*18+90} ${c.x+180+Math.cos(a)*35} ${c.y+115+Math.sin(a)*35})`}); }
+    Ci(g,c.x+180,c.y+115,18,"url(#gMetal)",{stroke:"#444"}); Ci(g,c.x+180,c.y+115,3,"#222");
+    resistor(g,c.x+70,c.y+185,44,["#a52a2a","#000","#ff8c00"]); resistor(g,c.x+130,c.y+185,44,["#a52a2a","#000","#ff8c00"]);
+    Tx(g,c.x+150,c.y+215,"KY-040",12,"#9fb4e6");
+  },
+  btn(c,g) {
+    R(g,c.x+108,c.y+8,100,94,"url(#gWhite)",{rx:10,stroke:"#9aa0a6","stroke-width":2,filter:"url(#fShadow)"});
+    R(g,c.x+118,c.y+18,80,74,"#cfd6dd",{rx:8,opacity:.8});
+    R(g,c.x+138,c.y+43,40,24,"#2a6fdb",{rx:3}); R(g,c.x+151,c.y+30,14,50,"#2a6fdb",{rx:3});                  // vástago en cruz
+    Tx(g,c.x+158,c.y+104,"MX low profile",9,"#667");
+    // patillas metálicas hacia los terminales
+    [40,80].forEach(py => { el("path",{d:`M${c.x+108},${c.y+py} L${c.x+31},${c.y+py}`,stroke:"#b88a1e","stroke-width":5,"stroke-linecap":"round",opacity:.5},g); });
+  },
+  buz(c,g) {
+    Ci(g,c.x+120,c.y+55,48,"url(#gBlack)",{stroke:"#000","stroke-width":2,filter:"url(#fShadow)"}); Ci(g,c.x+120,c.y+55,38,"#111",{stroke:"#333"}); Ci(g,c.x+120,c.y+55,6,"#000");
+    Tx(g,c.x+88,c.y+30,"+",16,"#ddd",{"font-weight":"700"});
+    [40,80].forEach((py,i) => el("path",{d:`M${c.x+160},${c.y+(i?72:40)} L${c.x+c.w-15},${c.y+py}`,stroke:"#b88a1e","stroke-width":3,"stroke-linecap":"round"},g));
+  },
+  lipo(c,g) {
+    R(g,c.x,c.y+10,c.w-36,c.h-20,"url(#gPouch)",{rx:7,stroke:"#3d5d92","stroke-width":2,filter:"url(#fShadow)"});
+    R(g,c.x,c.y+10,14,c.h-20,"#4a6ba3",{rx:5,opacity:.5}); R(g,c.x+22,c.y+28,c.w-92,52,"#f4f6fa",{rx:4,opacity:.95});
+    Tx(g,c.x+22+(c.w-92)/2,c.y+50,"3.7 V · 1000 mAh",12.5,"#223",{"font-weight":"700"}); Tx(g,c.x+22+(c.w-92)/2,c.y+66,"Li-Po 603450",9.5,"#556"); Tx(g,c.x+22+(c.w-92)/2,c.y+77,"con protección",9,"#556");
+    // cables y placa de protección
+    R(g,c.x+c.w-62,c.y+34,26,42,"#2f7a3a",{rx:3,stroke:"#145e2b"});
+    el("path",{d:`M${c.x+c.w-36},${c.y+40} L${c.x+c.w-14},${c.y+40}`,stroke:"#d62d2d","stroke-width":4,"stroke-linecap":"round"},g);
+    el("path",{d:`M${c.x+c.w-36},${c.y+75} L${c.x+c.w-14},${c.y+75}`,stroke:"#1a1a1a","stroke-width":4,"stroke-linecap":"round"},g);
+  },
+  chg(c,g) {
+    R(g,c.x,c.y,c.w,c.h,"url(#gPcbB)",{rx:10,stroke:"#0f3a78","stroke-width":2,filter:"url(#fShadow)"});
+    R(g,c.x+c.w/2-45,c.y-8,90,40,"url(#gMetal)",{rx:8,stroke:"#555"}); R(g,c.x+c.w/2-28,c.y-1,56,9,"#0b0b0d",{rx:4});                 // USB-C de carga
+    R(g,c.x+70,c.y+60,50,38,"#0b0b0d",{rx:2}); for (let i=0;i<4;i++) { R(g,c.x+74+i*11,c.y+54,5,8,"#bbb"); R(g,c.x+74+i*11,c.y+97,5,8,"#bbb"); } Tx(g,c.x+95,c.y+84,"TP4056",9,"#ccc");
+    R(g,c.x+140,c.y+62,34,26,"#0b0b0d",{rx:2}); Tx(g,c.x+157,c.y+80,"5V",9,"#ccc");
+    R(g,c.x+70,c.y+122,36,14,"#0b0b0d",{rx:2}); R(g,c.x+124,c.y+114,36,26,"#8a8f96",{rx:2}); Tx(g,c.x+142,c.y+131,"2.2µH",8,"#222");
+    Ci(g,c.x+190,c.y+60,5,"#ff2a2a"); Ci(g,c.x+205,c.y+60,5,"#2be34a"); Ci(g,c.x+190,c.y+60,9,"#ff2a2a",{opacity:.2});
+    for (let i=0;i<3;i++) smd(g,c.x+190,c.y+90+i*14,12,7);
+    Tx(g,c.x+c.w/2,c.y+c.h-8,"carga TP4056 + elevador 5 V",10,"#cfe0ff");
+  },
+  div(c,g) {
+    R(g,c.x,c.y,c.w,c.h,"url(#gPerf)",{rx:6,stroke:"#8a6d3a","stroke-width":2,filter:"url(#fShadow)"});
+    for (let i=0;i<10;i++) for (let j=0;j<4;j++) Ci(g,c.x+22+i*23.5,c.y+16+j*20,2.3,"#8a6d3a");
+    resistor(g,c.x+50,c.y+22,64,["#a52a2a","#000","#ffd700"]); resistor(g,c.x+50,c.y+58,64,["#a52a2a","#000","#ffd700"]);
+    Ci(g,c.x+160,c.y+44,13,"#e6b800",{stroke:"#8a6d00"}); Tx(g,c.x+160,c.y+49,"104",9,"#533");
+    Tx(g,c.x+125,c.y+c.h-4,"100k · 100k · 100 nF",9,"#5a4524");
+  },
+  usb(c,g) {
+    R(g,c.x+20,c.y+36,130,52,"url(#gWhite)",{rx:10,stroke:"#9aa0a6","stroke-width":2,filter:"url(#fShadow)"}); Tx(g,c.x+85,c.y+66,"5 V · 1 A",13,"#555");
+    el("path",{d:`M${c.x+85},${c.y+36} C${c.x+85},${c.y+20} ${c.x+85},${c.y+14} ${c.x+85},${c.y+8}`,stroke:"#222","stroke-width":7,"stroke-linecap":"round"},g);
+    R(g,c.x+c.w/2-17,c.y-6,34,22,"url(#gMetal)",{rx:5,stroke:"#555"});
+  },
+};
 function render() {
-  svg.innerHTML = "";
+  svg.innerHTML = ""; defs();
   const A = analyze();
   for (const c of Object.values(comps)) {
-    const dashed = (c.id==="lipo"||c.id==="chg"||c.id==="div") && !OPT.bat || (c.id==="buz" && !OPT.buz);
-    el("rect",{x:c.x,y:c.y,width:c.w,height:c.h,rx:14,fill:c.color,stroke:dashed?"#bbb":"#222","stroke-width":dashed?2:3,"stroke-dasharray":dashed?"8 6":"0"});
-    el("text",{x:c.x+c.w/2,y:c.y+(c.id==="esp"?34:30),"text-anchor":"middle","font-size":c.id==="esp"?22:19,"font-weight":"600",fill:dashed?"#aaa":"#222"},null,c.title);
+    const off = (c.id==="lipo"||c.id==="chg"||c.id==="div") && !OPT.bat || (c.id==="buz" && !OPT.buz);
+    const g = el("g",{opacity:off?.38:1}); ART[c.id](c,g);
+    el("text",{x:c.x+c.w/2,y:c.id==="usb"?c.y+c.h+22:c.y-(c.id==="chg"?16:10),"text-anchor":"middle","font-size":17,"font-weight":"700",fill:off?"#aaa":"#2a2a2a"},null,c.title + (off?" (opcional)":""));
   }
-  // cables
+  // cables: sombra + hilo + brillo
   wires.forEach((w,i) => {
-    const col = wireColor(w); const g = el("g",{class:"wire"});
-    el("path",{d:wirePath(w),fill:"none",stroke:"transparent","stroke-width":16},g);
-    el("path",{class:"vis",d:wirePath(w),fill:"none",stroke:col||"#d62d2d","stroke-width":5.5,"stroke-linecap":"round","stroke-dasharray":col?"0":"9 7",opacity:.92},g);
+    const col = wireColor(w); const g = el("g",{class:"wire"}); const d = wirePath(w);
+    el("path",{d,fill:"none",stroke:"transparent","stroke-width":18},g);
+    el("path",{class:"vis",d,fill:"none",stroke:col||"#d62d2d","stroke-width":5,"stroke-linecap":"round","stroke-dasharray":col?"0":"9 7",filter:"url(#fWire)"},g);
+    el("path",{d,fill:"none",stroke:"#fff","stroke-width":1.4,"stroke-linecap":"round",opacity:.28,transform:"translate(0,-1.2)","pointer-events":"none"},g);
     g.addEventListener("click", () => { wires.splice(i,1); update(); });
   });
-  // pistas: terminales válidos respecto al seleccionado
-  const hint = document.getElementById("oHint").checked; let valid = new Set();
+  // terminales: pines dorados, con etiqueta serigrafiada
+  const hint = $("oHint").checked; let valid = new Set();
   if (sel && hint) { const nid = expectedNet[idOf(sel)]; if (nid) for (const t of NETS[nid].t) valid.add(t); }
   for (const k of keys) {
     const t = term[k]; const c = comps[t.comp];
     const off = (c.id==="lipo"||c.id==="chg"||c.id==="div") && !OPT.bat || (c.id==="buz" && !OPT.buz);
-    const g = el("g",{class:"term"});
-    const used = wires.some(w => w.a===k || w.b===k);
-    const isSel = sel===k, isValid = valid.has(t.id) && t.id !== idOf(sel||"");
-    el("circle",{cx:t.x,cy:t.y,r:12,fill:"transparent"},g);
-    el("circle",{cx:t.x,cy:t.y,r:7,fill:isSel?"#1c7ed6":used?"#222":off?"#ddd":"#fff",stroke:isSel?"#1c7ed6":"#222","stroke-width":2.5},g);
-    if (isValid) el("circle",{cx:t.x,cy:t.y,r:13,fill:"none",stroke:"#1f9d55","stroke-width":3.5},g);
-    const dx = t.side==="L"?-16:t.side==="R"?16:0, dy = t.side==="T"?-16:t.side==="B"?20:5;
-    const anchor = t.side==="L"?"end":t.side==="R"?"start":"middle";
-    // las etiquetas de los pines del ESP32 van DENTRO de la placa
-    let lx = t.x + dx, la = anchor;
-    if (t.comp==="esp" && t.side==="L") { lx = t.x + 16; la = "start"; } else if (t.comp==="esp" && t.side==="R") { lx = t.x - 16; la = "end"; }
-    if (t.comp!=="esp" && (t.side==="L")) { lx = t.x + 16; la = "start"; } else if (t.comp!=="esp" && t.side==="R") { lx = t.x - 16; la = "end"; }
-    el("text",{x:lx,y:t.y+dy+(t.side==="T"||t.side==="B"?0:0),"text-anchor":la,"font-size":14,fill:off?"#aaa":"#222"},g,t.label);
+    const g = el("g",{class:"term",opacity:off?.5:1});
+    const used = wires.some(w => w.a===k || w.b===k), isSel = sel===k, isValid = valid.has(t.id) && t.id !== idOf(sel||"");
+    el("circle",{cx:t.x,cy:t.y,r:14,fill:"transparent"},g);
+    el("circle",{cx:t.x,cy:t.y,r:7.5,fill:isSel?"#1c7ed6":"url(#gGold)",stroke:isSel?"#0b4a8a":"#6b4e0c","stroke-width":1.6},g);
+    el("circle",{cx:t.x,cy:t.y,r:3,fill:used?"#222":"#3a2a05"},g);
+    if (isValid) el("circle",{cx:t.x,cy:t.y,r:14,fill:"none",stroke:"#1f9d55","stroke-width":3.5},g);
+    // etiqueta hacia dentro de la placa
+    const inwards = {L:[15,4,"start"],R:[-15,4,"end"],T:[0,26,"middle"],B:[0,-14,"middle"]}[t.side];
+    const darkBoard = ["esp","disp","enc","hx","chg","buz","lipo"].includes(t.comp);
+    el("text",{x:t.x+inwards[0],y:t.y+inwards[1],"text-anchor":inwards[2],"font-size":t.comp==="esp"?12.5:13,"font-weight":"600",fill:darkBoard?"#fff":"#222",stroke:darkBoard?"rgba(0,0,0,.45)":"rgba(255,255,255,.7)","stroke-width":2.2,"paint-order":"stroke"},g,t.label);
     g.addEventListener("click", () => { if (sel===null) sel = k; else if (sel===k) sel = null; else { addWire(sel,k); sel = null; } update(); });
   }
   return A;
 }
 
 // ======================= RESULTADOS =======================
-const $ = id => document.getElementById(id);
 function update() {
   OPT.bat = $("oBat").checked; OPT.rate = $("oRate").checked; OPT.buz = $("oBuz").checked;
   const A = render();
