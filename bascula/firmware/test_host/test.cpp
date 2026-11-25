@@ -67,7 +67,7 @@ int main() {
 
   // --- 0. Sin calibrar: aviso en pantalla
   float cpg0 = saved.cpg; saved.cpg = 0; step(100);
-  CHECK(frameHas("Sin calibrar"), "aviso de calibracion");
+  CHECK(frameHas(SIMPLE_UI ? "Calibrar" : "Sin calibrar"), "aviso de calibracion");
   saved.cpg = cpg0; step(100);
 
   // --- 1. Espresso: para solo al peso
@@ -75,8 +75,13 @@ int main() {
   g_weight = 150; step(1500);
   press(ENC_SW, 60);
   CHECK(armed, "tara arma el arranque");
+  step(1000);                                          // el aviso "Tara" tapa el objetivo durante 0,8 s
+  if (SIMPLE_UI) CHECK(frameHas("/ 36 g") && frameHas("Espresso"), "en espera: nombre del modo y objetivo ('/ 36 g')");
   CHECK(fabsf(shown) < 0.4f, "tara deja el peso en ~0 (shown=%.2f)", shown);
-  pour(36.0f, 1.6f, 2.0f);
+  g_weight += 0; { float added = 0; step(2000); while (added < 12.0f) { g_weight += 0.0192f; added += 0.0192f; step(12); } }
+  CHECK(state == BREW, "preparando");
+  if (SIMPLE_UI) CHECK(!frameHas("Espresso") && !frameHas("g/s") && !frameHas("25s"), "preparando: sin nombre del modo, sin caudal, sin ventana de tiempo");
+  pour(24.0f, 1.6f, 0);
   step(1200);
   CHECK(state == DONE, "espresso termina solo (state=%d)", (int)state);
   CHECK(fabsf(finalWeight - 36.0f) < 0.6f, "peso final ~36 (%.2f)", finalWeight);
@@ -105,7 +110,7 @@ int main() {
   CHECK(targetCue, "aviso de objetivo alcanzado");
   CHECK(notes() == n0 + 1, "aviso movil de objetivo (+1)");
   printf("   aviso: \"%s\" / \"%s\"\n", lastNote().title, lastNote().body);
-  step(1500); CHECK(frameHas("objetivo"), "pantalla muestra 'objetivo'");
+  step(1500); CHECK(SIMPLE_UI || frameHas("objetivo"), "pantalla muestra 'objetivo' (solo en la completa)");
   uint32_t t_before = g_ms; step(20000);
   CHECK(state == BREW, "sigue corriendo 20 s despues");
   press(BTN_PIN, 60);
@@ -159,7 +164,7 @@ int main() {
   CHECK(!frameHas("%"), "no se dibuja ningun porcentaje sin bateria");
   g_bat_mv = 1950; step(7000);                              // 3,90 V
   CHECK(batPresent && batPct >= 60 && batPct <= 75, "3,90 V -> %d %%", batPct);
-  step(200); CHECK(frameHas("%"), "el icono muestra el porcentaje");
+  step(200); CHECK(SIMPLE_UI ? !frameHas("%") : frameHas("%"), "el icono %s el porcentaje", SIMPLE_UI ? "no muestra (simplificada)" : "muestra");
   press(BTN_PIN, 1000);                                     // menu
   for (int i = 0; i < 9; i++) rotateClick(+1);
   step(300);

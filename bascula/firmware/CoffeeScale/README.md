@@ -103,7 +103,7 @@ mientras fluye. Verde dentro de la ventana de tiempo, rojo si se pasa. Detalles:
 
 ## Prueba en el servidor (sin placa)
 `firmware/test_host/run.sh` compila **el firmware real** contra piezas falsas de Arduino (pantalla, HX711, Wi-Fi, memoria, colas) y lo ejecuta
-con un café simulado. Comprueba (45 comprobaciones, hoy 0 fallos, también con AddressSanitizer/UBSan):
+con un café simulado. Comprueba (48 comprobaciones, hoy 0 fallos, también con AddressSanitizer/UBSan):
 - tara y arranque automático; espresso parado al peso (22 s, 35,9 g, ratio 1:2,0, un aviso al móvil);
 - V60: al llegar a 240 g el reloj **sigue**, avisa "objetivo alcanzado" y solo se para con el botón azul;
 - modo "sin goteo": para solo a los 8 s sin caudal tras el objetivo;
@@ -122,4 +122,17 @@ un rayo si detecta que carga, y en **Ajustes → Bateria** el porcentaje y la te
 - **Ajuste fino:** mide la tensión real con un polímetro y compárala con la de Ajustes → Bateria; si difieren, corrige `BAT_DIV`. El ADC del ESP32 no es lineal en los extremos.
 - La batería **no afecta a la báscula**: el HX711 sigue alimentándose del 3,3 V del ESP32. Con la radio Wi-Fi activa el consumo sube y la autonomía baja.
 - Módulos con **IP5306** y similares pueden **apagar la salida** si el consumo es bajo (< ~50 mA); la pantalla atenuada y el ESP32 sin Wi-Fi quedan cerca de ese límite. Si se apaga solo, usa TP4056 + elevador.
-- `firmware/test_host/run.sh` incluye ahora la batería: **45 comprobaciones, 0 fallos** (sin batería, 3,90 V, menú, batería baja con un solo aviso, carga, llena y desconexión). Sigue sin probarse en la placa.
+- `firmware/test_host/run.sh` incluye ahora la batería: **48 comprobaciones, 0 fallos** (sin batería, 3,90 V, menú, batería baja con un solo aviso, carga, llena y desconexión). Sigue sin probarse en la placa.
+
+## Pantalla simplificada (por defecto)
+La pantalla visible mide 34 × 19 mm (0,11 mm por píxel): un texto de 12 px mide ~1,3 mm y no se lee a medio metro (hacen falta ~2,5 mm). Por eso
+`SIMPLE_UI = true` (al principio del `.ino`) deja **solo lo imprescindible, en grande**:
+- **En espera:** nombre del modo (22 px), reloj, peso (dígitos de 36 px) y el objetivo abajo a la derecha (`/ 36 g`).
+- **Preparando:** reloj, peso, nivel de café y colores. Sin nombre del modo, sin caudal, sin ventana de tiempo (lo cuentan el nivel, el color y los aros).
+- **Terminado:** reloj, peso y ratio (`1:2.0`).
+- **Batería:** solo el icono (el porcentaje, en Ajustes). Si falta calibrar sale `Calibrar` en rojo; con batería crítica, `Carga ya`.
+- Con `SIMPLE_UI = false` vuelve la pantalla completa (letra pequeña: objetivo y ventana de tiempo arriba, g/s, porcentaje).
+- Fuentes nuevas `TrackerSans-Bold22.h` (ASCII, 22 px) y `TrackerSans-Bold36.h` (dígitos, 36 px), **generadas a partir de Liberation Sans Bold** (SIL OFL; ver `FONT-LICENSE.txt`) en el mismo formato que las demás.
+- `firmware/tools/vista_pantalla.py` dibuja la pantalla con las **fuentes reales** y las mismas coordenadas para detectar solapes sin la placa
+  (`img/pantalla_firmware_simulada.png`). No es TFT_eSPI: si cambias `drawMain()`, cambia también el script. Con él se vio y corrigió que el nombre del modo se pisaba con el reloj.
+- El banco de pruebas pasa a **48 comprobaciones, 0 fallos** (también comprueba que al preparar no aparecen el nombre del modo, el caudal ni la ventana de tiempo).

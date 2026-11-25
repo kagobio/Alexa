@@ -17,6 +17,8 @@
 #include <math.h>
 #include "TrackerSans-Bold15.h"
 #include "TrackerSans-Bold20.h"
+#include "TrackerSans-Bold22.h"   // letras a 22 px (nombre del modo, objetivo, ratio, avisos)
+#include "TrackerSans-Bold36.h"   // digitos a 36 px (peso)
 #include "TrackerSans-Regular12.h"
 #include "Jersey10-Digits96.h"
 #include "WaterUpdateAnimation.h" // Solo se usa waveAt() para la onda del cafe.
@@ -27,6 +29,9 @@ constexpr int TFT_BL = 22;
 constexpr int ENC_A = 33, ENC_B = 32, ENC_SW = 19, BTN_PIN = 21;
 constexpr int HX_DT = 16, HX_SCK = 17;
 constexpr int HX_RATE = 4;   // Opcional: pin RATE del HX711 (80 SPS). Ver README.
+// Pantalla simplificada: solo lo imprescindible y en tamaño legible (la pantalla visible mide 34 x 19 mm: un texto de 12 px mide ~1,3 mm).
+// true: reloj, peso, nivel de cafe y colores; el objetivo solo en espera, el ratio al terminar. false: pantalla completa (letra pequeña).
+constexpr bool SIMPLE_UI = true;
 constexpr int BAT_ADC = 35;  // Bateria: divisor 100k/100k desde B+ a GPIO35 (ADC1, solo entrada). Ver README.
 constexpr float BAT_DIV = 2.0f;   // relacion del divisor (Vbat = Vpin x 2). Ajustala si mides otra tension con un polimetro.
 
@@ -349,6 +354,18 @@ String fmtT(int sec) {
   else snprintf(b, sizeof b, "%d:%02d", sec / 60, sec % 60);
   return String(b);
 }
+// Peso grande: digitos a 36 px; el punto se dibuja a mano y la "g" va en Bold22.
+void drawWeightBig(float g, int x, int y, uint16_t col) {
+  int t = int(fabsf(g) * 10 + 0.5f);
+  String ip = String((g < 0 && t > 0) ? "-" : "") + String(t / 10);
+  int h = fontH(TrackerSansBold36);
+  txt(ip, x, y, TrackerSansBold36, col);
+  int w = txtW(ip, TrackerSansBold36);
+  cv.fillRect(x + w + 3, y + h - 6, 5, 5, col);                  // punto decimal
+  String fr = String(t % 10);
+  txt(fr, x + w + 12, y, TrackerSansBold36, col);
+  txt("g", x + w + 16 + txtW(fr, TrackerSansBold36), y + h - 17, TrackerSansBold22, GREY);
+}
 // Peso: parte entera y decimal en Bold20 (sin '.'; el punto se dibuja a mano) + "g".
 void drawWeight(float g, int x, int y, uint16_t col) {
   int t = int(fabsf(g) * 10 + 0.5f);
@@ -384,7 +401,7 @@ void drawBattery(int x, int y, uint32_t now) {
   }
   if (batCharging) { cv.drawLine(x + 16, y + 1, x + 11, y + 6, WHITE); cv.drawLine(x + 11, y + 6, x + 17, y + 6, WHITE); cv.drawLine(x + 17, y + 6, x + 12, y + 11, WHITE); }
   char b[8]; snprintf(b, sizeof b, "%d%%", batPct);
-  txt(b, x - 5, y - 1, TrackerSansRegular12, TXT_DIM, TR_DATUM);
+  if (!SIMPLE_UI) txt(b, x - 5, y - 1, TrackerSansRegular12, TXT_DIM, TR_DATUM);
 }
 // Pantalla: negro, tiempo grande, peso, y un nivel de cafe que sube con una onda suave.
 void drawMain(uint32_t now) {
@@ -424,11 +441,16 @@ void drawMain(uint32_t now) {
 
   // ---- cabecera: modo (con fundido y desplazamiento al cambiar) y objetivo ----
   float k = easeS((now - modeChangedMs) / 240.0f);
-  txt(d.name, 14 + int((1 - k) * 22), 10, TrackerSansRegular12, fade565(0xCE, 0xCF, 0xCE, 0.25f + 0.75f * k));
-  if (target > 0) {
-    char b[48];
-    snprintf(b, sizeof b, "%.0f > %.0f g   %s-%s", c.dose, target, fmtT(c.tMin).c_str(), fmtT(c.tMax).c_str());
-    txt(b, batPresent ? 226 : 306, 11, TrackerSansRegular12, TXT_DIM, TR_DATUM);
+  if (SIMPLE_UI) {
+    // el nombre del modo no se muestra mientras se prepara; el objetivo va abajo a la derecha, en espera
+    if (state != BREW) txt(d.name, 14 + int((1 - k) * 22), 4, TrackerSansBold22, fade565(0xCE, 0xCF, 0xCE, 0.25f + 0.75f * k));
+  } else {
+    txt(d.name, 14 + int((1 - k) * 22), 10, TrackerSansRegular12, fade565(0xCE, 0xCF, 0xCE, 0.25f + 0.75f * k));
+    if (target > 0) {
+      char b[48];
+      snprintf(b, sizeof b, "%.0f > %.0f g   %s-%s", c.dose, target, fmtT(c.tMin).c_str(), fmtT(c.tMax).c_str());
+      txt(b, batPresent ? 226 : 306, 11, TrackerSansRegular12, TXT_DIM, TR_DATUM);
+    }
   }
   drawBattery(270, 9, now);
 
@@ -444,28 +466,46 @@ void drawMain(uint32_t now) {
   char tb[16]; snprintf(tb, sizeof tb, "%02d:%02d", sec / 60, sec % 60);
   int tw = txtW(tb, Jersey10Digits96);
   int tick = running ? int((1 - easeS((now - secMs) / 170.0f)) * 3) : 0;
-  txt(tb, (320 - tw) / 2, 20 - tick, Jersey10Digits96, tcol);
+  const int ty = SIMPLE_UI ? 36 : 20;                              // simplificada: los digitos (52 px de alto) quedan entre el nombre del modo y el peso
+  txt(tb, (320 - tw) / 2, ty - tick, Jersey10Digits96, tcol);
   if (running || state == DONE) {
-    cv.fillCircle((320 + tw) / 2 + 8, 88, 2, TXT_DIM);
-    txt(String(tenth), (320 + tw) / 2 + 14, 70, TrackerSansBold15, TXT_DIM);
+    cv.fillCircle((320 + tw) / 2 + 8, SIMPLE_UI ? ty + 48 : 88, SIMPLE_UI ? 3 : 2, TXT_DIM);
+    if (SIMPLE_UI) txt(String(tenth), (320 + tw) / 2 + 15, ty + 34, TrackerSansBold22, TXT_DIM);   // base alineada con la de los digitos
+    else txt(String(tenth), (320 + tw) / 2 + 14, 70, TrackerSansBold15, TXT_DIM);
   }
 
   // ---- peso (izquierda) y caudal / ratio / aviso (derecha) ----
-  drawWeight(shown, 14, 126, WHITE);
-  String right;
-  char rb[24];
-  if (millis() < toastUntil) right = toast;
-  else if (running && targetCue && c.stopMode != 1) right = "objetivo";
-  else if (running) { snprintf(rb, sizeof rb, "%.1f g/s", flowNow); right = rb; }
-  else if (state == DONE && c.dose > 0) { snprintf(rb, sizeof rb, "1:%.1f", finalWeight / c.dose); right = rb; }
-  if (right.length()) txt(right, 306, 134, TrackerSansBold15, TXT_RIGHT, TR_DATUM);
-  // pista discreta solo cuando hace falta
-  if (state == READY) {
-    if (batPresent && batPct <= 5 && !batCharging) txt("Bateria critica: conecta el cargador", 160, 152, TrackerSansRegular12, RED, TC_DATUM);
-    else if (saved.cpg == 0) txt("Sin calibrar: azul largo > Ajustes", 160, 152, TrackerSansRegular12, RED, TC_DATUM);
-    else if (!armed) txt("pomo: tara", 160, 154, TrackerSansRegular12, TXT_DIMMER, TC_DATUM);
-    else { cv.fillCircle(160, 18, 3, c.autoStart ? GREEN : GREY); }
-    if (!armed) cv.drawCircle(160, 18, 3, GREY);
+  if (SIMPLE_UI) {
+    drawWeightBig(shown, 14, 118, WHITE);
+    // texto de la derecha (una sola cosa a la vez): aviso > calibrar > bateria critica > ratio (terminado) > objetivo (en espera)
+    String right; uint16_t rcol = TXT_RIGHT; char rb[24];
+    if (millis() < toastUntil) right = toast;
+    else if (state == READY && saved.cpg == 0) { right = "Calibrar"; rcol = RED; }
+    else if (state == READY && batPresent && batPct <= 5 && !batCharging) { right = "Carga ya"; rcol = RED; }
+    else if (state == DONE && c.dose > 0) { snprintf(rb, sizeof rb, "1:%.1f", finalWeight / c.dose); right = rb; }
+    else if (state == READY && target > 0) { snprintf(rb, sizeof rb, "/ %.0f g", target); right = rb; rcol = TXT_DIM; }
+    if (right.length()) txt(right, 306, 126, TrackerSansBold22, rcol, TR_DATUM);
+    if (state == READY) {                                          // puntito: tara hecha = verde; falta = hueco
+      if (armed && c.autoStart) cv.fillCircle(250, 15, 3, GREEN); else cv.drawCircle(250, 15, 3, GREY);   // junto a la bateria: el nombre del modo puede ser largo
+    }
+  } else {
+    drawWeight(shown, 14, 126, WHITE);
+    String right;
+    char rb[24];
+    if (millis() < toastUntil) right = toast;
+    else if (running && targetCue && c.stopMode != 1) right = "objetivo";
+    else if (running) { snprintf(rb, sizeof rb, "%.1f g/s", flowNow); right = rb; }
+    else if (state == DONE && c.dose > 0) { snprintf(rb, sizeof rb, "1:%.1f", finalWeight / c.dose); right = rb; }
+    if (right.length()) txt(right, 306, 134, TrackerSansBold15, TXT_RIGHT, TR_DATUM);
+    // pista discreta solo cuando hace falta
+    if (state == READY) {
+      if (batPresent && batPct <= 5 && !batCharging) txt("Bateria critica: conecta el cargador", 160, 152, TrackerSansRegular12, RED, TC_DATUM);
+      else if (saved.cpg == 0) txt("Sin calibrar: azul largo > Ajustes", 160, 152, TrackerSansRegular12, RED, TC_DATUM);
+      else if (!armed) txt("pomo: tara", 160, 154, TrackerSansRegular12, TXT_DIMMER, TC_DATUM);
+      else { cv.fillCircle(160, 18, 3, c.autoStart ? GREEN : GREY); }
+      if (!armed) cv.drawCircle(160, 18, 3, GREY);
+    }
+  
   }
 
   // ---- tara: aro azul alrededor del peso ----
